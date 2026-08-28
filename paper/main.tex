@@ -1,0 +1,222 @@
+\documentclass{article}
+
+\usepackage{microtype}
+\usepackage[accepted]{icml2025}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+
+\icmltitlerunning{Do Tabular Foundation Models Scale with Dimensionality?}
+
+\begin{document}
+
+\twocolumn[
+\icmltitle{Do Tabular Foundation Models Scale with Dimensionality? \\
+           A Synthetic-Data Study from 10 to 10,000 Features}
+
+\begin{icmlauthorlist}
+\icmlauthor{Timothy Daley}{indep}
+\end{icmlauthorlist}
+
+\icmlaffiliation{indep}{Independent research}
+\icmlcorrespondingauthor{Timothy Daley}{timy.pdaley@gmail.com}
+
+\icmlkeywords{tabular data, foundation models, in-context learning, TabPFN, dimensionality, regression}
+
+\vskip 0.3in
+]
+
+\printAffiliationsAndNotice{}
+
+\begin{abstract}
+TODO: fill in after results are final. One paragraph: motivation, method (synthetic
+low-dimensional nonlinear signal embedded in up to 10,000 features, feature-bagging
+ensemble for models beyond their native feature cap), and the headline empirical
+finding (how TabPFN v2 / TabICL test R\textsuperscript{2} degrades relative to tree
+baselines as D grows, under fixed-N and N-scaling-with-D regimes).
+\end{abstract}
+
+\section{Introduction}
+\label{sec:intro}
+
+Tabular foundation models -- transformer architectures pretrained on large corpora of
+synthetic or real tabular datasets and applied zero-shot via in-context learning --
+have shown striking accuracy on small- to medium-sized tabular regression and
+classification benchmarks \citep{muller2022transformers, hollmann2025tabpfn}. Unlike
+gradient-boosted trees or linear models, these models are not refit per dataset;
+instead, the training set is passed as context alongside the query points, and a
+single forward pass produces predictions.
+
+This convenience comes with an architectural constraint that has received little
+systematic study: every released tabular foundation model has a hard cap on the
+number of features and rows it was pretrained and validated on. TabPFN v2
+\citep{hollmann2025tabpfn} was trained and evaluated up to 500 features and 10,000
+rows; TabICL \citep{qu2025tabicl} extends this considerably but still caps out in the
+low thousands of features. Real tabular data routinely exceeds these limits --
+genomics, click-stream, and sensor-fusion datasets can have thousands to tens of
+thousands of columns -- so understanding \emph{how} these models degrade (or don't)
+past their trained regime, and whether standard workarounds close the gap, is a
+practical question for anyone considering a tabular foundation model outside a
+benchmark setting.
+
+We study this question with a controlled synthetic data generating process: a fixed,
+low-dimensional (5-feature) nonlinear function determines the regression target, and
+the remaining $D-5$ ambient features are either noisy nonlinear functions of the true
+features or pure noise, with $D$ swept on a log-spaced grid from 10 to 10,000. Because
+the true signal's dimensionality is fixed while the ambient dimensionality grows, this
+isolates the effect of dimensionality \emph{per se} from the effect of adding more true
+signal, which is the confound present in most real high-dimensional tabular benchmarks.
+We compare TabPFN v2 and TabICL, each wrapped in a feature-bagging ensemble
+\citep{feuer2023scaling} once $D$ exceeds their native cap, against Ridge regression,
+Random Forest \citep{breiman2001random}, and XGBoost \citep{chen2016xgboost}, under
+both a fixed training-set-size regime and a regime where training set size scales with
+$D$.
+
+Our contributions are:
+\begin{itemize}
+\item A synthetic benchmark generator with a controllable, low-dimensional nonlinear
+      true signal embedded in up to 10,000 ambient features, released with this paper.
+\item An empirical characterization of how held-out test RMSE/R\textsuperscript{2} for
+      TabPFN v2 and TabICL scale with $D$, relative to tree and linear baselines, under
+      both fixed-$N$ and $N$-scaling-with-$D$ regimes.
+\item A direct empirical test of the feature-bagging ensemble workaround
+      \citep{feuer2023scaling} at the specific scale (10,000 features) it was proposed
+      to address.
+\end{itemize}
+
+\section{Related Work}
+\label{sec:related}
+
+\textbf{Tabular foundation models.} \citet{muller2022transformers} introduced Prior-Data
+Fitted Networks (PFNs), transformers trained on synthetic data to approximate Bayesian
+inference in a single forward pass, which \citet{hollmann2025tabpfn} scaled into TabPFN
+v2, a model pretrained once and applied zero-shot to new tabular datasets via
+in-context learning, achieving Nature-cover accuracy on datasets up to 10,000 rows and
+500 features. \citet{qu2025tabicl} proposed TabICL, which restructures the in-context
+learning architecture (a column-then-row transformer with a fixed-size latent
+summary) specifically to scale to far larger row counts and a higher feature cap.
+\citet{ma2024tabdpt} (TabDPT) and \citet{zeng2025tabflex} (TabFlex) pursue related
+scaling directions -- retrieval-augmented real-data pretraining, and linear-attention
+mechanisms, respectively -- motivated by the same observation we study directly: that
+naively applying an in-context tabular learner outside its trained regime degrades
+performance.
+
+\textbf{Scaling TabPFN past its trained regime.} \citet{feuer2023scaling} is the paper
+most directly relevant to our method: they show TabPFN's accuracy falls as feature
+count grows past its trained regime, and propose closing the gap with sketching,
+feature selection, and feature-bagging ensembles -- fitting independent copies of
+TabPFN on random feature subsets and averaging. We adopt their feature-bagging
+approach as the mechanism for applying TabPFN v2 and TabICL beyond their native caps,
+and, unlike their work (which evaluates on existing high-dimensional tabular
+benchmarks, where the number of truly informative features is unknown and grows with
+$D$), we hold the number of truly informative features fixed at 5 while sweeping $D$,
+isolating the effect of ambient dimensionality from the effect of additional signal.
+
+\textbf{High-dimensional tabular learning more broadly.} Feature selection, random
+projections, and ensembling over feature subsets are classical tools for
+high-dimensional tabular learning with tree and linear models; our contribution is not
+a new such tool, but an empirical measurement of how well the existing tool
+(feature-bagging) closes the dimensionality gap for the specific architectures that
+motivated it.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Synthetic data generating process}
+\label{sec:dgp}
+
+Each dataset is parameterized by an ambient feature count $D \geq 5$ and a sample
+count $N$. We draw $D_{\text{true}}=5$ latent features
+$z = (z_1, \dots, z_5) \sim \mathcal{N}(0, I_5)$ per row and define the regression
+target through a fixed nonlinear function:
+\begin{align}
+f(z) &= 3\sin(z_1 z_2) + 2 z_3^2 - 1.5\, z_4 z_5 + z_1 z_4^2 \nonumber \\
+     &\quad - 0.5\, z_2^3 + 2\tanh(z_1 + z_3 - z_4), \\
+y &= f(z) + \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, (\eta \cdot \sigma_{f})^2),
+\end{align}
+where $\sigma_f$ is the empirical standard deviation of $f(z)$ over the batch and
+$\eta$ (the noise-to-signal ratio) is fixed across all $D$ so the achievable ceiling on
+test $R^2$ does not itself vary with dimensionality.
+
+The remaining $D-5$ ambient features are split into two kinds. A fraction
+$p_{\text{noise}}$ are pure noise, $x_j \sim \mathcal{N}(0,1)$, independent of $y$. The
+rest are noisy derived features: for each, we sample $k \in \{1,2,3\}$ of the true
+latent features uniformly without replacement, a random weight vector, and one of four
+transforms (identity, square, sine, tanh) applied to the weighted sum, then add
+independent Gaussian noise at scale $\rho$. These derived features are correlated with
+$y$ (through $z$) but not perfectly recoverable, matching the informal specification
+that ambient features be "correlated or noisy functions of the true features...but not
+100\% derivable." All $D$ columns (true, derived, and pure-noise) are then randomly
+permuted so column position carries no information. Train, validation, and test splits
+are drawn as one i.i.d. block per (D, N, seed) and sliced, since rows are independent
+draws.
+
+\subsection{Dimensionality and sample-size grid}
+\label{sec:grid}
+
+We sweep $D \in \{10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000\}$. Two regimes
+control the training set size $N_{\text{train}}$: \textbf{fixed-N}, where
+$N_{\text{train}}$ is held at a constant TODO across all $D$; and \textbf{scaling-N},
+where $N_{\text{train}} = \text{clip}(4D, \text{TODO}, \text{TODO})$. Validation and
+test set sizes (TODO, TODO) are held fixed across all conditions so evaluation is
+comparable. Each cell is repeated over TODO random seeds.
+
+\subsection{Models}
+\label{sec:models}
+
+We evaluate Ridge regression \citep{hoerl1970ridge}, Random Forest
+\citep{breiman2001random}, XGBoost \citep{chen2016xgboost}, TabPFN v2
+\citep{hollmann2025tabpfn}, and TabICL \citep{qu2025tabicl}. For the two foundation
+models, whenever $D$ exceeds the model's native feature cap ($c=500$ for TabPFN v2,
+$c=2000$ for TabICL), we apply a feature-bagging ensemble \citep{feuer2023scaling}:
+partition the $D$ columns into $\lceil D/c \rceil$ disjoint chunks of size $\leq c$ via
+a random permutation, fit an independent copy of the model on each chunk, and average
+the chunks' predictions. When $D \leq c$ this reduces to a single chunk containing
+every feature, i.e.\ the model runs exactly as it natively would.
+
+\section{Experimental Setup}
+\label{sec:setup}
+
+TODO: hardware/software (Apple Silicon CPU, no CUDA), library versions, and any
+model-specific settings (e.g. \verb|ignore_pretraining_limits=True| for TabPFN so
+a single chunk that exceeds its internal threshold does not raise rather than degrade).
+
+\section{Results}
+\label{sec:results}
+
+TODO: figures (\verb|figures/r2_vs_dimensionality.pdf|,
+\verb|figures/rmse_vs_dimensionality.pdf|) and summary tables, once the sweep has
+run to completion.
+
+\section{Discussion and Limitations}
+\label{sec:discussion}
+
+TODO. Points to cover regardless of the empirical outcome:
+\begin{itemize}
+\item The feature-bagging ensemble is an approximation we impose on TabPFN/TabICL, not
+      a capability native to either model; results past each model's native cap
+      characterize \emph{our wrapper}, not the released model in isolation.
+\item All experiments ran on CPU (Apple Silicon, no CUDA); TabPFN v2/TabICL are
+      primarily validated and optimized for GPU inference, so absolute wall-clock
+      numbers here are not representative of production latency.
+\item TabPFN v2 and later PriorLabs checkpoints are released under a non-commercial
+      research license; TabICL is BSD-3-Clause.
+\item A single fixed nonlinear true function and one specific derived-feature
+      construction were used; results characterize this generative family, not
+      dimensionality scaling in general.
+\end{itemize}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+TODO.
+
+\section*{Acknowledgements}
+TODO or remove.
+
+\bibliography{refs}
+\bibliographystyle{icml2025}
+
+\end{document}

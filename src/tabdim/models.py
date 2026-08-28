@@ -36,7 +36,16 @@ def make_ridge(seed: int) -> SklearnStyleModel:
 
 
 def make_random_forest(seed: int) -> SklearnStyleModel:
-    return SklearnStyleModel(RandomForestRegressor(n_estimators=300, n_jobs=-1, random_state=seed))
+    # sklearn's RandomForestRegressor defaults to max_features=1.0 (every split
+    # considers all D features), unlike the classifier's 'sqrt' default. At D in the
+    # thousands that makes each split O(N*D) and the whole forest impractically slow;
+    # 'sqrt' is the standard high-dimensional setting and is what most practitioners
+    # actually use.
+    return SklearnStyleModel(
+        RandomForestRegressor(
+            n_estimators=300, max_features="sqrt", n_jobs=-1, random_state=seed
+        )
+    )
 
 
 def make_xgboost(seed: int) -> SklearnStyleModel:
