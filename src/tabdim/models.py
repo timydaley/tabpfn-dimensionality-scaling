@@ -6,7 +6,7 @@ from typing import Callable
 
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import RidgeCV
 from xgboost import XGBRegressor
 
 # Hard feature-count caps beyond which each foundation model's context was never
@@ -32,7 +32,12 @@ class SklearnStyleModel:
 
 
 def make_ridge(seed: int) -> SklearnStyleModel:
-    return SklearnStyleModel(Ridge(alpha=1.0, random_state=seed))
+    # Plain Ridge at a fixed alpha=1.0 exhibits the classic double-descent spike
+    # right at the interpolation threshold n_samples == n_features (Belkin et al.,
+    # 2019): near-perfect training fit, catastrophic test error, on both sides of
+    # which Ridge behaves normally. Real usage cross-validates alpha; RidgeCV keeps
+    # this baseline realistic rather than gratuitously bad at one specific D.
+    return SklearnStyleModel(RidgeCV(alphas=np.logspace(-3, 3, 13)))
 
 
 def make_random_forest(seed: int) -> SklearnStyleModel:

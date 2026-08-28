@@ -158,10 +158,15 @@ draws.
 
 We sweep $D \in \{10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000\}$. Two regimes
 control the training set size $N_{\text{train}}$: \textbf{fixed-N}, where
-$N_{\text{train}}$ is held at a constant TODO across all $D$; and \textbf{scaling-N},
-where $N_{\text{train}} = \text{clip}(4D, \text{TODO}, \text{TODO})$. Validation and
-test set sizes (TODO, TODO) are held fixed across all conditions so evaluation is
-comparable. Each cell is repeated over TODO random seeds.
+$N_{\text{train}}=2000$ is held constant across all $D$; and \textbf{scaling-N}, where
+$N_{\text{train}} = \text{clip}(4D, 200, 2000)$, i.e.\ training set size grows linearly
+with $D$ until it reaches the same 2000-row ceiling used by the fixed-N regime. This
+shared ceiling is set by our compute budget: on the CPU-only machine used for these
+experiments (34GB RAM, no CUDA), a single TabICL chunk at $N_{\text{train}}=2000$ and
+its 2000-feature cap was the largest size we could run without the process being
+killed for exceeding available memory (Section~\ref{sec:setup}). Validation and test
+sets (500 and 1000 rows respectively) are held fixed across all conditions so
+evaluation is comparable. Each cell is repeated over 5 random seeds.
 
 \subsection{Models}
 \label{sec:models}
@@ -179,9 +184,24 @@ every feature, i.e.\ the model runs exactly as it natively would.
 \section{Experimental Setup}
 \label{sec:setup}
 
-TODO: hardware/software (Apple Silicon CPU, no CUDA), library versions, and any
-model-specific settings (e.g. \verb|ignore_pretraining_limits=True| for TabPFN so
-a single chunk that exceeds its internal threshold does not raise rather than degrade).
+All experiments ran on a single Apple Silicon (M1 Max, 34GB RAM) machine, CPU-only --
+no CUDA GPU was available, and TabPFN v2 / TabICL are primarily validated for GPU
+inference, so wall-clock numbers reported here should not be read as representative of
+production latency. Software versions: Python 3.12 (native arm64), \verb|torch|
+2.13.0, \verb|tabpfn| 8.5.0, \verb|tabicl| 2.1.1, \verb|scikit-learn| 1.9.0,
+\verb|xgboost| 3.4.1, \verb|numpy| 2.5.2.
+
+For TabPFN we pass \verb|ignore_pretraining_limits=True| so a chunk that exceeds an
+internal feature-count threshold degrades gracefully rather than raising. Both TabPFN
+and TabICL self-ensemble over multiple internal estimators by default (TabPFN:
+\verb|n_estimators='auto'|, scaled by dataset size; TabICL: 8); on our hardware the
+default configuration was killed by the OS for exceeding available memory on a single
+TabICL fit at $D{=}2000$, $N_{\text{train}}{=}2000$. We therefore fix
+\verb|n_estimators=1| for both foundation models throughout, which keeps memory bounded
+and was substantially faster in our timing checks. This is a compute-constrained choice: it
+should not be read as a claim that either model's best achievable accuracy is reported
+here, only their accuracy under this fixed compute budget, on equal footing with each
+other.
 
 \section{Results}
 \label{sec:results}
