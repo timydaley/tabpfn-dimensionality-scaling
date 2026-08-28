@@ -34,23 +34,29 @@
 Tabular foundation models such as TabPFN v2 and TabICL apply in-context learning to
 tabular regression and classification, but every released model has a hard cap on
 the number of features it was pretrained and validated on (500 for TabPFN v2,
-roughly 2,000 for TabICL). We study how these models behave when ambient
-dimensionality is pushed far past that cap while the amount of true signal is held
-fixed: a synthetic regression task with a 5-feature nonlinear true function embedded
-in $D \in \{10, \ldots, 10000\}$ ambient features, the remainder either noisy
-nonlinear functions of the true features or pure noise. Beyond each model's native
-cap we apply a feature-bagging ensemble (fit independent copies on disjoint feature
-chunks, average predictions), the standard workaround from prior work. Across a
-log-spaced grid of $D$ and two training-set-size regimes (fixed vs.\ scaling with
-$D$), TabICL's held-out test $R^2$ stays within a narrow band (0.899--0.937) across
-three orders of magnitude in $D$ -- including at $D=10000$, where it runs as a
-5-chunk ensemble -- and dominates Ridge, Random Forest, and XGBoost baselines
-throughout. We implemented the same evaluation for TabPFN v2 but could not obtain
-results: unlike every other model here, TabPFN v2 requires an interactive,
-human-completed license acceptance before its weights can be downloaded, which is
-not obtainable within an automated pipeline; we report this as an access
-limitation rather than a technical one, and release the (untested) TabPFN v2 code
-path alongside the working TabICL pipeline.
+roughly 2,000 for TabICL). We study how these models behave as the number of
+features $D$ grows from 10 to 10,000 under two conditions that prior high-dimensional
+tabular benchmarks conflate: a \textbf{fixed-signal} condition, where a 5-feature
+nonlinear true function is embedded in $D$ ambient features (the rest noisy functions
+of the true features or pure noise) so ambient dimensionality grows while true signal
+complexity does not; and a \textbf{scaling-signal} condition, where the number of
+causal features itself grows with $D$ (5\% of $D$), so both grow together as in most
+real high-dimensional data. Beyond each model's native feature cap we apply a
+feature-bagging ensemble (fit independent copies on disjoint feature chunks, average
+predictions), the standard workaround from prior work. Under the fixed-signal
+condition, TabICL's held-out test $R^2$ stays within a narrow band (0.899--0.937)
+across three orders of magnitude in $D$ and dominates Ridge, Random Forest, and
+XGBoost throughout -- no degradation. Under the scaling-signal condition, with
+training set size held fixed at 2000 rows, every model degrades sharply: TabICL falls
+from $R^2{=}0.937$ at $D{=}10$ to $0.151$ at $D{=}10000$ (an 84\% relative drop), and
+at that largest $D$ a plain cross-validated Ridge baseline (0.157) matches or exceeds
+it. Dimensionality alone is not the hazard; dimensionality that carries proportionally
+more true signal than a fixed training set can support is. We implemented the same
+evaluation for TabPFN v2 but could not obtain results: unlike every other model here,
+TabPFN v2 requires an interactive, human-completed license acceptance before its
+weights can be downloaded, which is not obtainable within an automated pipeline; we
+report this as an access limitation rather than a technical one, and release the
+(untested) TabPFN v2 code path alongside the working TabICL pipeline.
 \end{abstract}
 
 \section{Introduction}
@@ -76,13 +82,23 @@ past their trained regime, and whether standard workarounds close the gap, is a
 practical question for anyone considering a tabular foundation model outside a
 benchmark setting.
 
-We study this question with a controlled synthetic data generating process: a fixed,
-low-dimensional (5-feature) nonlinear function determines the regression target, and
-the remaining $D-5$ ambient features are either noisy nonlinear functions of the true
-features or pure noise, with $D$ swept on a log-spaced grid from 10 to 10,000. Because
-the true signal's dimensionality is fixed while the ambient dimensionality grows, this
-isolates the effect of dimensionality \emph{per se} from the effect of adding more true
-signal, which is the confound present in most real high-dimensional tabular benchmarks.
+We study this question with a controlled synthetic data generating process, under two
+conditions that most real high-dimensional tabular benchmarks conflate. In the
+\textbf{fixed-signal} condition, a fixed, low-dimensional (5-feature) nonlinear
+function determines the regression target, and the remaining $D-5$ ambient features
+are either noisy nonlinear functions of the true features or pure noise, with $D$
+swept on a log-spaced grid from 10 to 10,000. Because the true signal's dimensionality
+is fixed while the ambient dimensionality grows, this isolates the effect of
+dimensionality \emph{per se} from the effect of adding more true signal. But real
+high-dimensional tabular data rarely works this way: a genomics dataset with 10,000
+measured genes, or a click-stream dataset with 10,000 engineered features, typically
+has more true predictive structure than a 10-feature version of the same problem, not
+the same 5 causal factors buried deeper in noise. We therefore also run a
+\textbf{scaling-signal} condition, where the number of causal features itself grows
+with $D$ (Section~\ref{sec:dgp}), holding training set size fixed -- the harder,
+arguably more realistic regime, and the one under which we find real degradation
+(Section~\ref{sec:results}).
+
 We implemented the same evaluation for TabPFN v2 and TabICL, each wrapped in a
 feature-bagging ensemble \citep{feuer2023scaling} once $D$ exceeds their native cap,
 against Ridge regression, Random Forest \citep{breiman2001random}, and XGBoost
@@ -96,14 +112,21 @@ for correctness on toy data, and released, but not run to completion.
 
 Our contributions are:
 \begin{itemize}
-\item A synthetic benchmark generator with a controllable, low-dimensional nonlinear
-      true signal embedded in up to 10,000 ambient features, released with this paper.
+\item A synthetic benchmark generator with a controllable nonlinear true signal
+      embedded in up to 10,000 ambient features, supporting both a fixed and a
+      $D$-scaling number of causal features, released with this paper.
 \item An empirical characterization of how held-out test RMSE/R\textsuperscript{2} for
-      TabICL scales with $D$, relative to tree and linear baselines, under both
-      fixed-$N$ and $N$-scaling-with-$D$ regimes.
+      TabICL scales with $D$, relative to tree and linear baselines, under fixed-$N$
+      and $N$-scaling-with-$D$ training regimes, when the number of causal features is
+      held fixed at 5.
+\item A second characterization under a scaling-signal condition, showing that when the
+      number of causal features grows with $D$ instead, every model -- including
+      TabICL -- degrades sharply, isolating dimensionality growth alone (not harmful,
+      in our first result) from dimensionality growth that outpaces a fixed training
+      set's ability to resolve proportionally more true structure (which is).
 \item A direct empirical test of the feature-bagging ensemble workaround
       \citep{feuer2023scaling} at the specific scale (10,000 features) it was proposed
-      to address.
+      to address, under both conditions.
 \item A working, tested implementation of the same evaluation for TabPFN v2, released
       for anyone who can clear its license gate to run and extend.
 \end{itemize}
@@ -149,31 +172,48 @@ motivated it.
 \subsection{Synthetic data generating process}
 \label{sec:dgp}
 
-Each dataset is parameterized by an ambient feature count $D \geq 5$ and a sample
-count $N$. We draw $D_{\text{true}}=5$ latent features
-$z = (z_1, \dots, z_5) \sim \mathcal{N}(0, I_5)$ per row and define the regression
-target through a fixed nonlinear function:
-\begin{align}
-f(z) &= 3\sin(z_1 z_2) + 2 z_3^2 - 1.5\, z_4 z_5 + z_1 z_4^2 \nonumber \\
-     &\quad - 0.5\, z_2^3 + 2\tanh(z_1 + z_3 - z_4), \\
-y &= f(z) + \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, (\eta \cdot \sigma_{f})^2),
-\end{align}
+Each dataset is parameterized by an ambient feature count $D$, a causal feature count
+$D_{\text{true}} \leq D$, and a sample count $N$. We draw $D_{\text{true}}$ latent
+features $z = (z_1, \dots, z_{D_{\text{true}}}) \sim \mathcal{N}(0, I_{D_{\text{true}}})$
+per row and define the regression target through a fixed nonlinear function $f(z)$:
+\begin{equation}
+y = f(z) + \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, (\eta \cdot \sigma_{f})^2),
+\end{equation}
 where $\sigma_f$ is the empirical standard deviation of $f(z)$ over the batch and
 $\eta$ (the noise-to-signal ratio) is fixed across all $D$ so the achievable ceiling on
-test $R^2$ does not itself vary with dimensionality.
+test $R^2$ does not itself vary with dimensionality holding $D_{\text{true}}$ fixed.
+For $D_{\text{true}}=5$, $f$ is the fixed hand-written function
+\begin{align}
+f(z) &= 3\sin(z_1 z_2) + 2 z_3^2 - 1.5\, z_4 z_5 + z_1 z_4^2 \nonumber \\
+     &\quad - 0.5\, z_2^3 + 2\tanh(z_1 + z_3 - z_4).
+\end{align}
+For other $D_{\text{true}}$, $f$ is a sum of $2 D_{\text{true}}$ terms, each a random
+transform (identity, square, sine, or tanh) of a weighted combination of $k \in
+\{1,2,3\}$ causal features chosen uniformly without replacement, with random weights
+and an overall coefficient -- the same construction used for the derived ambient
+features below, so causal-feature interactions exist for the feature-bagging ensemble
+to potentially sever across chunks (Section~\ref{sec:discussion}). This term set is
+seeded only by $D_{\text{true}}$, not by the per-run data seed, so every seed sharing a
+given $D_{\text{true}}$ evaluates the identical task -- the seed axis varies the drawn
+data, not the task itself, exactly as for the hand-written $D_{\text{true}}=5$ case.
 
-The remaining $D-5$ ambient features are split into two kinds. A fraction
-$p_{\text{noise}}$ are pure noise, $x_j \sim \mathcal{N}(0,1)$, independent of $y$. The
-rest are noisy derived features: for each, we sample $k \in \{1,2,3\}$ of the true
-latent features uniformly without replacement, a random weight vector, and one of four
-transforms (identity, square, sine, tanh) applied to the weighted sum, then add
-independent Gaussian noise at scale $\rho$. These derived features are correlated with
-$y$ (through $z$) but not perfectly recoverable, matching the informal specification
-that ambient features be "correlated or noisy functions of the true features...but not
-100\% derivable." All $D$ columns (true, derived, and pure-noise) are then randomly
-permuted so column position carries no information. Train, validation, and test splits
-are drawn as one i.i.d. block per (D, N, seed) and sliced, since rows are independent
-draws.
+We control $D_{\text{true}}$ via two \textbf{signal regimes}: \textbf{fixed-signal},
+where $D_{\text{true}}=5$ regardless of $D$ (isolating ambient dimensionality from
+signal dimensionality, and reproducing the hand-written $f$ above); and
+\textbf{scaling-signal}, where $D_{\text{true}} = \max(5, \text{round}(0.05 D))$, so
+5\% of features are causal, reaching $D_{\text{true}}=500$ at $D=10000$.
+
+The remaining $D - D_{\text{true}}$ ambient features are split into two kinds. A
+fraction $p_{\text{noise}}$ are pure noise, $x_j \sim \mathcal{N}(0,1)$, independent of
+$y$. The rest are noisy derived features: for each, we sample $k \in \{1,2,3\}$ of the
+true latent features uniformly without replacement, a random weight vector, and one of
+the same four transforms applied to the weighted sum, then add independent Gaussian
+noise at scale $\rho$. These derived features are correlated with $y$ (through $z$) but
+not perfectly recoverable, matching the informal specification that ambient features be
+"correlated or noisy functions of the true features...but not 100\% derivable." All $D$
+columns (true, derived, and pure-noise) are then randomly permuted so column position
+carries no information. Train, validation, and test splits are drawn as one i.i.d.
+block per (D, N, seed) and sliced, since rows are independent draws.
 
 \subsection{Dimensionality and sample-size grid}
 \label{sec:grid}
@@ -189,6 +229,13 @@ its 2000-feature cap was the largest size we could run without the process being
 killed for exceeding available memory (Section~\ref{sec:setup}). Validation and test
 sets (500 and 1000 rows respectively) are held fixed across all conditions so
 evaluation is comparable. Each cell is repeated over 5 random seeds.
+
+The fixed-signal condition is run under both $N$-regimes. The scaling-signal
+condition is run only under fixed-$N$ ($N_{\text{train}}=2000$ for every $D$): this is
+also a compute-budget choice, and it is the harder of the two $N$-regimes for
+scaling-signal, since the amount of training data does not grow to compensate for the
+growing amount of true structure -- if degradation were absent even here, it would
+have been hard to argue for it under scaling-$N$ either.
 
 \subsection{Models}
 \label{sec:models}
@@ -241,9 +288,13 @@ than results we could not obtain.
 \section{Results}
 \label{sec:results}
 
-Figure~\ref{fig:r2} shows held-out test $R^2$ as a function of $D$ for both regimes,
-averaged over 5 seeds (error bars: $\pm 1$ SD). TabICL is the only foundation model
-shown; TabPFN v2 could not be evaluated (Section~\ref{sec:setup}).
+\subsection{Fixed-signal condition: ambient dimensionality alone}
+\label{sec:results-fixed-signal}
+
+Figure~\ref{fig:r2} shows held-out test $R^2$ as a function of $D$ for both $N$-regimes
+under the fixed-signal condition ($D_{\text{true}}=5$ regardless of $D$), averaged over
+5 seeds (error bars: $\pm 1$ SD). TabICL is the only foundation model shown; TabPFN v2
+could not be evaluated (Section~\ref{sec:setup}).
 
 \begin{figure*}[t]
 \centering
@@ -287,10 +338,77 @@ subsampling.
 RMSE results (Figure in \verb|figures/rmse_vs_dimensionality.pdf|, summary table in
 \verb|figures/rmse_summary.csv|) tell the same story and are omitted here for space.
 
+\subsection{Scaling-signal condition: dimensionality that carries more signal}
+\label{sec:results-scaling-signal}
+
+Figure~\ref{fig:signal-comparison} places the fixed-signal condition above (left) next
+to the scaling-signal condition (right), both under the fixed-$N$ regime
+($N_{\text{train}}=2000$ throughout), so the only difference between panels is whether
+$D_{\text{true}}$ stays at 5 or grows to $\max(5, 0.05D)$ alongside $D$.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\linewidth]{../figures/signal_regime_comparison.pdf}
+\caption{Held-out test $R^2$ vs.\ $D$ under fixed-$N$ ($N_{\text{train}}=2000$), for
+the fixed-signal (left, $D_{\text{true}}=5$ always) and scaling-signal (right,
+$D_{\text{true}} = \max(5, 0.05D)$) conditions. Points are means over 5 seeds; error
+bars are $\pm 1$ SD.}
+\label{fig:signal-comparison}
+\end{figure*}
+
+\textbf{Every model degrades sharply once causal dimensionality scales with $D$,
+including TabICL.} The two panels are identical at $D \in \{10,20,50,100\}$, where the
+scaling-signal rule still floors at $D_{\text{true}}=5$ (Section~\ref{sec:dgp}) --
+this is a useful internal check, since the two conditions are literally the same task
+there and the numbers match exactly. They diverge sharply from $D=200$
+($D_{\text{true}}=10$) onward. TabICL falls from $R^2=0.937$ at $D=10$ to $0.784$ at
+$D=200$, $0.624$ at $D=1000$, and $0.151$ at $D=10000$ ($D_{\text{true}}=500$) -- an
+84\% relative drop, versus at most a 4\% drop across the same $D$ range in the
+fixed-signal condition. XGBoost and Random Forest show the same qualitative pattern
+(XGBoost: $0.829 \to 0.082$; Random Forest: $0.775 \to 0.061$), and even RidgeCV, which
+was improving with $D$ under fixed-signal, now falls ($0.382 \to 0.157$, after a
+partial recovery at $D=100$--$200$ where more causal features briefly help a linear
+model directly).
+
+\textbf{TabICL's advantage over the baselines shrinks -- and disappears -- as the task
+gets harder.} At $D=1000$ TabICL still leads clearly (0.624 vs.\ XGBoost's 0.394,
+Random Forest's 0.251, RidgeCV's 0.355). By $D=10000$, though, TabICL (0.151) is
+statistically indistinguishable from RidgeCV (0.157, higher on average) and only
+modestly ahead of XGBoost (0.082); all four models are within roughly 0.1 $R^2$ of
+each other and all are performing poorly in absolute terms. Whatever the mechanism
+(Section~\ref{sec:discussion}), TabICL's dominance in Section~\ref{sec:results-fixed-signal}
+does not carry over unconditionally -- it holds when the amount of true structure is
+small and fixed, and erodes as the task's true complexity grows toward (and past) what
+2000 training rows can resolve, regardless of which model is asked to resolve it.
+
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
-\textbf{Why RidgeCV overtakes the tree baselines at high $D$.} This is very likely an
+\textbf{What causes the scaling-signal degradation?} Three candidate mechanisms, not
+mutually exclusive. (1) \emph{Statistical difficulty}: with $N_{\text{train}}$ fixed at
+2000, resolving $D_{\text{true}}=500$ interacting causal features from 2000 rows is a
+much harder estimation problem than resolving 5, independent of which model is used --
+consistent with XGBoost and Random Forest, which are never chunked, degrading by
+similar relative amounts to TabICL. (2) \emph{Severed interactions under feature-bagging}:
+TabICL's ensemble randomly partitions $D$ columns into $\lceil D/2000 \rceil$ chunks: at
+$D=10000$ (5 chunks), two causal features assigned independently and uniformly at
+random each have only a $1/5$ chance of landing in the same chunk, so roughly 80\% of
+this term's contribution to $f(z)$ is invisible to every single chunk model, and only
+partially recovered by averaging chunk predictions that each saw a different, partial
+view. This is specific to the ensemble wrapper and cannot explain XGBoost's or Random
+Forest's degradation, but could compound TabICL's. (3) \emph{Derived-feature dilution}:
+under scaling-signal there are also more \emph{derived} ambient features referencing
+the (now larger) causal set, diluting the true columns' relative share of $D$ similarly
+in both conditions -- this alone does not obviously explain the divergence, since the
+fixed-signal condition has the same 95\%-ambient structure and does not degrade. Our
+design cannot cleanly separate (1) from (2) -- doing so would require running TabICL
+natively (no chunking) at $D_{\text{true}}=500, D=10000$, which exceeds its 2000-feature
+cap by construction -- so we report the combined effect and flag the decomposition as
+future work.
+
+\textbf{Why RidgeCV overtakes the tree baselines at high $D$ under the fixed-signal
+condition.} (This effect is specific to fixed-signal; RidgeCV does not overtake the
+trees under scaling-signal, Section~\ref{sec:results-scaling-signal}.) This is very likely an
 artifact of our specific data generating process rather than a general property of
 linear models in high dimensions. Each derived feature (Section~\ref{sec:dgp}) is a
 noisy nonlinear transform (square, sine, or tanh) of a small weighted combination of
@@ -323,11 +441,15 @@ $D$ would otherwise distract from the paper's actual question.
 
 \textbf{The feature-bagging ensemble is our addition, not a native capability.} Every
 result past a model's native feature cap (TabPFN v2: 500; TabICL: 2000) characterizes
-\emph{our wrapper} applied to that model, not the released model in isolation. That
-TabICL shows no visible accuracy cost when moving from native scale to a 5-chunk
-ensemble at $D=10000$ is evidence the specific wrapper we used is a reasonable
-workaround in this setting, not evidence about the underlying model's behavior past
-its cap if it were retrained or extended to handle more features natively.
+\emph{our wrapper} applied to that model, not the released model in isolation. Under
+fixed-signal, TabICL shows no visible accuracy cost moving from native scale to a
+5-chunk ensemble at $D=10000$, evidence the wrapper is a reasonable workaround when
+causal features are few enough that chunking rarely splits an interaction across
+chunks. Under scaling-signal, where $D_{\text{true}}=500$ at that same $D=10000$, the
+wrapper's chunking plausibly compounds the degradation (Section~\ref{sec:results-scaling-signal},
+mechanism 2) -- we cannot rule this out with the current design, since testing TabICL
+without chunking at $D_{\text{true}}=500$ requires $D \leq 2000$, where the
+scaling-signal rule has not yet reached $D_{\text{true}}=500$.
 
 \textbf{Compute constraints.} All experiments ran on CPU (Apple Silicon M1 Max,
 34GB RAM, no CUDA); TabPFN v2 and TabICL are primarily validated and optimized for GPU
@@ -339,33 +461,50 @@ which likely understates their best achievable accuracy at any given $D$.
 \textbf{Licensing.} TabPFN v2 and later PriorLabs checkpoints are released under a
 non-commercial research license; TabICL is BSD-3-Clause.
 
-\textbf{Scope of the generative model.} A single fixed nonlinear true function and one
-specific derived-feature construction were used throughout; results characterize this
-generative family, not dimensionality scaling in general. In particular, the
-RidgeCV-overtakes-trees effect above is a direct consequence of this specific
-construction and should not be over-generalized.
+\textbf{Scope of the generative model.} A single fixed nonlinear true function family
+and one specific derived-feature construction were used throughout; results
+characterize this generative family, not dimensionality scaling in general. The
+scaling-signal rule (5\% of $D$ is causal) is one arbitrary choice among many
+plausible ones; we do not claim this fraction is representative of any particular
+real domain, only that \emph{some} such fraction is more realistic than holding
+$D_{\text{true}}$ fixed at 5 while $D$ reaches 10,000. Likewise the
+RidgeCV-overtakes-trees effect under fixed-signal (Section~\ref{sec:discussion}) is a
+direct consequence of the specific derived-feature construction and should not be
+over-generalized.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We built a synthetic benchmark that isolates ambient feature dimensionality from
-signal dimensionality -- a fixed 5-feature nonlinear true model embedded in up to
-10,000 features -- and used it to test whether a tabular foundation model's accuracy
-degrades as $D$ grows past its trained regime. For TabICL, under a
-feature-bagging ensemble applied beyond its native 2000-feature cap, we found no
-such degradation: test $R^2$ stayed within a narrow band (0.899--0.937) across three
-orders of magnitude in $D$, and clearly dominated Ridge, Random Forest, and XGBoost
-baselines throughout. We were unable to run the same evaluation for TabPFN v2, which
-gates its model weights behind an interactive license-acceptance step with no
-automated path around it (Section~\ref{sec:setup}); the central open question this
-leaves is whether TabICL's robustness to dimensionality is specific to its
-architecture (which was explicitly designed to scale further than TabPFN) or holds
-for TabPFN's feature-bagging ensemble too. Our implementation supports running that
-comparison directly -- it only needs a valid \texttt{TABPFN\_TOKEN} -- and we release
-it for that purpose. Along the way, our benchmark reproduced the double-descent
-phenomenon at exactly the interpolation threshold for an under-regularized linear
-baseline, which we take as independent evidence the pipeline is measuring what it
-claims to measure.
+We built a synthetic benchmark that can hold ambient feature dimensionality and
+causal signal dimensionality either independent or coupled, and used it to test
+whether a tabular foundation model's accuracy degrades as $D$ grows past its trained
+regime. The answer depends entirely on which of those two quantities is actually
+growing. When only ambient dimensionality grows (fixed-signal, $D_{\text{true}}=5$
+throughout), TabICL showed no degradation: test $R^2$ stayed within a narrow band
+(0.899--0.937) across three orders of magnitude in $D$ -- including past its native
+2000-feature cap, under a feature-bagging ensemble -- and clearly dominated Ridge,
+Random Forest, and XGBoost baselines throughout. When causal dimensionality scales
+with $D$ instead (scaling-signal, training set size held fixed), every model
+degraded sharply, TabICL included: from $R^2=0.937$ at $D=10$ to $0.151$ at
+$D=10000$, at which point a plain cross-validated Ridge baseline performs
+comparably. Dimensionality growth alone was not the hazard in our experiments;
+dimensionality growth that outpaces what a fixed amount of training data can resolve
+was. Real high-dimensional tabular data is presumably closer to our scaling-signal
+condition than our fixed-signal one, which is a reason for caution before reading
+robustness results like our own fixed-signal finding as license to deploy a tabular
+foundation model on arbitrarily wide data without checking whether more features are
+also bringing more (or less) signal per row of training data.
+
+We were unable to run either condition for TabPFN v2, which gates its model weights
+behind an interactive license-acceptance step with no automated path around it
+(Section~\ref{sec:setup}); the central open question this leaves is whether
+TabPFN's feature-bagging ensemble shows the same fixed-signal robustness and
+scaling-signal collapse we found for TabICL, or differs from it in either direction.
+Our implementation supports running both comparisons directly -- it only needs a
+valid \texttt{TABPFN\_TOKEN} -- and we release it for that purpose. Along the way,
+our benchmark reproduced the double-descent phenomenon at exactly the interpolation
+threshold for an under-regularized linear baseline, which we take as independent
+evidence the pipeline is measuring what it claims to measure.
 
 \section*{Acknowledgements}
 This research was assisted by Claude (Anthropic).
