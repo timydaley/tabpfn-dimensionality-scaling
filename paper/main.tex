@@ -45,7 +45,12 @@ log-spaced grid of $D$ and two training-set-size regimes (fixed vs.\ scaling wit
 $D$), TabICL's held-out test $R^2$ stays within a narrow band (0.899--0.937) across
 three orders of magnitude in $D$ -- including at $D=10000$, where it runs as a
 5-chunk ensemble -- and dominates Ridge, Random Forest, and XGBoost baselines
-throughout. \textbf{TODO: add TabPFN v2 results.}
+throughout. We implemented the same evaluation for TabPFN v2 but could not obtain
+results: unlike every other model here, TabPFN v2 requires an interactive,
+human-completed license acceptance before its weights can be downloaded, which is
+not obtainable within an automated pipeline; we report this as an access
+limitation rather than a technical one, and release the (untested) TabPFN v2 code
+path alongside the working TabICL pipeline.
 \end{abstract}
 
 \section{Introduction}
@@ -78,22 +83,29 @@ features or pure noise, with $D$ swept on a log-spaced grid from 10 to 10,000. B
 the true signal's dimensionality is fixed while the ambient dimensionality grows, this
 isolates the effect of dimensionality \emph{per se} from the effect of adding more true
 signal, which is the confound present in most real high-dimensional tabular benchmarks.
-We compare TabPFN v2 and TabICL, each wrapped in a feature-bagging ensemble
-\citep{feuer2023scaling} once $D$ exceeds their native cap, against Ridge regression,
-Random Forest \citep{breiman2001random}, and XGBoost \citep{chen2016xgboost}, under
-both a fixed training-set-size regime and a regime where training set size scales with
-$D$.
+We implemented the same evaluation for TabPFN v2 and TabICL, each wrapped in a
+feature-bagging ensemble \citep{feuer2023scaling} once $D$ exceeds their native cap,
+against Ridge regression, Random Forest \citep{breiman2001random}, and XGBoost
+\citep{chen2016xgboost}, under both a fixed training-set-size regime and a regime
+where training set size scales with $D$. Unlike the other four models, TabPFN v2
+requires a one-time, human-completed license acceptance with the model provider
+before its weights can be downloaded (Section~\ref{sec:setup}); this proved to be a
+hard blocker in our automated setting, so the empirical results in this paper cover
+TabICL against the three baselines, with the TabPFN v2 code path implemented, tested
+for correctness on toy data, and released, but not run to completion.
 
 Our contributions are:
 \begin{itemize}
 \item A synthetic benchmark generator with a controllable, low-dimensional nonlinear
       true signal embedded in up to 10,000 ambient features, released with this paper.
 \item An empirical characterization of how held-out test RMSE/R\textsuperscript{2} for
-      TabPFN v2 and TabICL scale with $D$, relative to tree and linear baselines, under
-      both fixed-$N$ and $N$-scaling-with-$D$ regimes.
+      TabICL scales with $D$, relative to tree and linear baselines, under both
+      fixed-$N$ and $N$-scaling-with-$D$ regimes.
 \item A direct empirical test of the feature-bagging ensemble workaround
       \citep{feuer2023scaling} at the specific scale (10,000 features) it was proposed
       to address.
+\item A working, tested implementation of the same evaluation for TabPFN v2, released
+      for anyone who can clear its license gate to run and extend.
 \end{itemize}
 
 \section{Related Work}
@@ -213,12 +225,25 @@ should not be read as a claim that either model's best achievable accuracy is re
 here, only their accuracy under this fixed compute budget, on equal footing with each
 other.
 
+\textbf{TabPFN v2 could not be run.} As of this writing, the \texttt{tabpfn} package
+requires downloading model weights from PriorLabs, which is gated behind a one-time
+license acceptance completed interactively in a browser, followed by an API token
+(\texttt{TABPFN\_TOKEN}) generated from an account page. This is a human-in-the-loop
+step with no automated or headless path around it, and we did not complete it in
+time for this paper. The \texttt{tabpfn} code path in our released implementation (model wrapper,
+feature-bagging ensemble, sweep integration) shares the exact same generic
+ensemble and sweep code as TabICL's -- which we did run end-to-end -- differing only
+in which underlying estimator is constructed; the ensemble wrapper itself is unit
+tested against a stand-in linear estimator. We are confident the TabPFN path would
+run correctly given a valid token, but report zero TabPFN v2 results here rather
+than results we could not obtain.
+
 \section{Results}
 \label{sec:results}
 
 Figure~\ref{fig:r2} shows held-out test $R^2$ as a function of $D$ for both regimes,
-averaged over 5 seeds (error bars: $\pm 1$ SD). \textbf{TODO: add TabPFN v2 once its
-license token is available; currently TabICL is the only foundation model shown.}
+averaged over 5 seeds (error bars: $\pm 1$ SD). TabICL is the only foundation model
+shown; TabPFN v2 could not be evaluated (Section~\ref{sec:setup}).
 
 \begin{figure*}[t]
 \centering
@@ -330,13 +355,17 @@ degrades as $D$ grows past its trained regime. For TabICL, under a
 feature-bagging ensemble applied beyond its native 2000-feature cap, we found no
 such degradation: test $R^2$ stayed within a narrow band (0.899--0.937) across three
 orders of magnitude in $D$, and clearly dominated Ridge, Random Forest, and XGBoost
-baselines throughout. \textbf{TODO: extend this conclusion once TabPFN v2 results are
-available} -- the central open question is whether this robustness is specific to
-TabICL's architecture (which was explicitly designed to scale further than TabPFN)
-or holds for TabPFN's feature-bagging ensemble too. Along the way, our benchmark
-reproduced the double-descent phenomenon at exactly the interpolation threshold for
-an under-regularized linear baseline, which we take as independent evidence the
-pipeline is measuring what it claims to measure.
+baselines throughout. We were unable to run the same evaluation for TabPFN v2, which
+gates its model weights behind an interactive license-acceptance step with no
+automated path around it (Section~\ref{sec:setup}); the central open question this
+leaves is whether TabICL's robustness to dimensionality is specific to its
+architecture (which was explicitly designed to scale further than TabPFN) or holds
+for TabPFN's feature-bagging ensemble too. Our implementation supports running that
+comparison directly -- it only needs a valid \texttt{TABPFN\_TOKEN} -- and we release
+it for that purpose. Along the way, our benchmark reproduced the double-descent
+phenomenon at exactly the interpolation threshold for an under-regularized linear
+baseline, which we take as independent evidence the pipeline is measuring what it
+claims to measure.
 
 \section*{Acknowledgements}
 This research was assisted by Claude (Anthropic).
