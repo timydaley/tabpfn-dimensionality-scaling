@@ -17,7 +17,10 @@ from .models import get_model
 FIXED_N_TRAIN = 2000
 SCALING_FACTOR = 4
 SCALING_N_MIN = 200
-SCALING_N_MAX = 4000
+# Capped at 2000 rather than higher: on this CPU-only 34GB machine, TabICL at
+# D=2000/N_train=2000 was the largest single-chunk size we could run without an
+# OOM kill (see models.py). FIXED_N_TRAIN=2000 is exactly at that boundary too.
+SCALING_N_MAX = 2000
 
 
 @dataclass

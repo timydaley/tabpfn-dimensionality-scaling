@@ -54,18 +54,39 @@ def make_xgboost(seed: int) -> SklearnStyleModel:
     )
 
 
+# Both TabPFN and TabICL internally self-ensemble over multiple estimators by
+# default (TabPFN: n_estimators='auto', scaled up by dataset size; TabICL: 8). On
+# this CPU-only, no-CUDA machine (34GB RAM) that default OOM-killed a single
+# TabICL fit at D=2000/N_train=2000. Pinning n_estimators=1 keeps memory bounded
+# and was substantially faster in our timing check -- a compute-constrained
+# choice, not a claim that it matches each model's best achievable accuracy.
+_FOUNDATION_MODEL_N_ESTIMATORS = 1
+
+
 def make_tabpfn(seed: int, device: str = "cpu") -> SklearnStyleModel:
     from tabpfn import TabPFNRegressor
 
     return SklearnStyleModel(
-        TabPFNRegressor(device=device, random_state=seed, ignore_pretraining_limits=True)
+        TabPFNRegressor(
+            device=device,
+            random_state=seed,
+            ignore_pretraining_limits=True,
+            n_estimators=_FOUNDATION_MODEL_N_ESTIMATORS,
+        )
     )
 
 
 def make_tabicl(seed: int, device: str = "cpu") -> SklearnStyleModel:
     from tabicl import TabICLRegressor
 
-    return SklearnStyleModel(TabICLRegressor(device=device, random_state=seed, verbose=False))
+    return SklearnStyleModel(
+        TabICLRegressor(
+            device=device,
+            random_state=seed,
+            verbose=False,
+            n_estimators=_FOUNDATION_MODEL_N_ESTIMATORS,
+        )
+    )
 
 
 class FeatureBaggedRegressor:
@@ -74,7 +95,7 @@ class FeatureBaggedRegressor:
     fit/predict a fresh model instance per chunk, and average predictions.
 
     This is the feature-bagging pattern used to push TabPFN-style in-context
-    learners past their trained regime (see Frantar & Xin et al., "Scaling
+    learners past their trained regime (see Feuer, Hegde & Cohen, "Scaling
     TabPFN: Sketching and Feature Selection for Tabular PFNs", arXiv:2311.10609).
     When n_features <= max_features this degrades to a single chunk containing
     every feature, i.e. the model runs exactly as it natively would.

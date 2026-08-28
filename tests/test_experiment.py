@@ -18,7 +18,7 @@ def test_n_train_fixed_regime_constant_across_d():
 
 def test_n_train_scaling_regime_grows_with_d_and_is_clamped():
     small = n_train_for_regime("scaling_n", 10)
-    mid = n_train_for_regime("scaling_n", 500)
+    mid = n_train_for_regime("scaling_n", 200)
     large = n_train_for_regime("scaling_n", 100000)
     assert small == SCALING_N_MIN
     assert small < mid < large
