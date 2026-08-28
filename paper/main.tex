@@ -31,11 +31,21 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-TODO: fill in after results are final. One paragraph: motivation, method (synthetic
-low-dimensional nonlinear signal embedded in up to 10,000 features, feature-bagging
-ensemble for models beyond their native feature cap), and the headline empirical
-finding (how TabPFN v2 / TabICL test R\textsuperscript{2} degrades relative to tree
-baselines as D grows, under fixed-N and N-scaling-with-D regimes).
+Tabular foundation models such as TabPFN v2 and TabICL apply in-context learning to
+tabular regression and classification, but every released model has a hard cap on
+the number of features it was pretrained and validated on (500 for TabPFN v2,
+roughly 2,000 for TabICL). We study how these models behave when ambient
+dimensionality is pushed far past that cap while the amount of true signal is held
+fixed: a synthetic regression task with a 5-feature nonlinear true function embedded
+in $D \in \{10, \ldots, 10000\}$ ambient features, the remainder either noisy
+nonlinear functions of the true features or pure noise. Beyond each model's native
+cap we apply a feature-bagging ensemble (fit independent copies on disjoint feature
+chunks, average predictions), the standard workaround from prior work. Across a
+log-spaced grid of $D$ and two training-set-size regimes (fixed vs.\ scaling with
+$D$), TabICL's held-out test $R^2$ stays within a narrow band (0.899--0.937) across
+three orders of magnitude in $D$ -- including at $D=10000$, where it runs as a
+5-chunk ensemble -- and dominates Ridge, Random Forest, and XGBoost baselines
+throughout. \textbf{TODO: add TabPFN v2 results.}
 \end{abstract}
 
 \section{Introduction}
@@ -206,35 +216,130 @@ other.
 \section{Results}
 \label{sec:results}
 
-TODO: figures (\verb|figures/r2_vs_dimensionality.pdf|,
-\verb|figures/rmse_vs_dimensionality.pdf|) and summary tables, once the sweep has
-run to completion.
+Figure~\ref{fig:r2} shows held-out test $R^2$ as a function of $D$ for both regimes,
+averaged over 5 seeds (error bars: $\pm 1$ SD). \textbf{TODO: add TabPFN v2 once its
+license token is available; currently TabICL is the only foundation model shown.}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\linewidth]{../figures/r2_vs_dimensionality.pdf}
+\caption{Held-out test $R^2$ vs.\ number of features $D$ (log scale), for training
+set size held fixed (left) and scaling with $D$ (right). Points are means over 5
+seeds; error bars are $\pm 1$ SD. TabICL uses the feature-bagging ensemble beyond
+its 2000-feature cap ($D=5000$: 3 chunks; $D=10000$: 5 chunks).}
+\label{fig:r2}
+\end{figure*}
+
+\textbf{TabICL does not degrade with dimensionality in our setting, and clearly
+dominates every baseline throughout.} In the fixed-$N$ regime, TabICL's mean test
+$R^2$ starts at 0.937 ($D=10$), dips to a minimum of 0.899 around $D=200$--$500$, and
+recovers to 0.928 by $D=10000$ -- a span of at most 0.038 across three orders of
+magnitude in $D$, with no monotonic trend. This includes the two largest $D$ values
+(5000 and 10000), where TabICL is running as a 3- and 5-chunk feature-bagging
+ensemble rather than natively: the ensemble does not visibly cost accuracy relative
+to the dip already present at native scale ($D \leq 2000$). Every baseline sits well
+below TabICL across the entire grid: at $D=10000$ (fixed-$N$), XGBoost reaches 0.791,
+Random Forest 0.771, and RidgeCV 0.830 -- the closest baseline, but still 0.098 below
+TabICL.
+
+In the scaling-$N$ regime, all four models start lower at small $D$ (where
+$N_{\text{train}}$ is also small: 200 rows at $D=10$) and climb as $D$ (and hence
+$N_{\text{train}}$) grows, converging exactly with the fixed-$N$ numbers once
+$N_{\text{train}}$ saturates at its 2000-row ceiling for $D \geq 500$ (by
+construction, Section~\ref{sec:grid}). TabICL leads throughout this climb as well:
+0.786 at $D=10$ ($N_{\text{train}}=200$) rising to 0.928 at $D=10000$
+($N_{\text{train}}=2000$), versus XGBoost's 0.519 $\to$ 0.791 and RidgeCV's
+0.260 $\to$ 0.830 over the same range.
+
+RidgeCV is the weakest model at low $D$ (0.382 at $D=10$, fixed-$N$) but improves
+monotonically with $D$ and overtakes both tree baselines by $D=10000$ (0.830 vs.\
+0.791 XGBoost, 0.771 Random Forest). We discuss why in
+Section~\ref{sec:discussion}. Random Forest and XGBoost are both roughly flat across
+$D$ in the fixed-$N$ regime (0.71--0.83), consistent with tree ensembles' typical
+robustness to irrelevant or weakly-informative features via per-split feature
+subsampling.
+
+RMSE results (Figure in \verb|figures/rmse_vs_dimensionality.pdf|, summary table in
+\verb|figures/rmse_summary.csv|) tell the same story and are omitted here for space.
 
 \section{Discussion and Limitations}
 \label{sec:discussion}
 
-TODO. Points to cover regardless of the empirical outcome:
-\begin{itemize}
-\item The feature-bagging ensemble is an approximation we impose on TabPFN/TabICL, not
-      a capability native to either model; results past each model's native cap
-      characterize \emph{our wrapper}, not the released model in isolation.
-\item All experiments ran on CPU (Apple Silicon, no CUDA); TabPFN v2/TabICL are
-      primarily validated and optimized for GPU inference, so absolute wall-clock
-      numbers here are not representative of production latency.
-\item TabPFN v2 and later PriorLabs checkpoints are released under a non-commercial
-      research license; TabICL is BSD-3-Clause.
-\item A single fixed nonlinear true function and one specific derived-feature
-      construction were used; results characterize this generative family, not
-      dimensionality scaling in general.
-\end{itemize}
+\textbf{Why RidgeCV overtakes the tree baselines at high $D$.} This is very likely an
+artifact of our specific data generating process rather than a general property of
+linear models in high dimensions. Each derived feature (Section~\ref{sec:dgp}) is a
+noisy nonlinear transform (square, sine, or tanh) of a small weighted combination of
+the true latent features. As $D$ grows, more such derived features are drawn, and by
+chance some land close to a term that actually appears in $f(z)$ (e.g.\ a transform
+close to $z_3^2$ or $\tanh(\cdot)$ of a similar combination). Once enough
+approximately-matching nonlinear basis functions accumulate among the $D$ columns, a
+purely linear model over those columns can partially reconstruct the nonlinear $f(z)$
+-- effectively an unintentional random-features expansion. This is a property of our
+specific derived-feature construction (Section~\ref{sec:dgp}), not evidence that
+linear models generically improve with ambient dimensionality; a construction using a
+single fixed transform family, or none, would likely not produce this effect.
+
+\textbf{An unplanned validation of the benchmark against known theory.} During
+development, plain Ridge regression at a fixed $\alpha=1$ produced a strikingly bad
+result ($R^2 \approx -0.5$ to $-1.0$) at exactly $D = N_{\text{train}} = 2000$ in the
+fixed-$N$ regime, with normal-looking results on both sides. We initially suspected a
+data generation or solver bug, but multiple solvers (SVD, Cholesky, LSQR) agreed on
+the value, and the training design matrix was full rank. This is the double-descent
+phenomenon \citep{belkin2019reconciling}: weakly-regularized linear models are known
+to peak in test error exactly at the interpolation threshold $n=p$, with
+generalization recovering on both the classical ($n \gg p$) and overparameterized
+($p \gg n$) sides. That our synthetic benchmark reproduces this exact, sharply
+localized, theoretically predicted failure mode -- at precisely the one $D$ value
+where $N_{\text{train}}$ crosses it -- is a useful sanity check that the pipeline
+generates and evaluates data correctly. We report all baselines using RidgeCV
+(cross-validated $\alpha$) rather than fixed-$\alpha$ Ridge, since practitioners
+cross-validate in practice and an artificially bad linear baseline at one specific
+$D$ would otherwise distract from the paper's actual question.
+
+\textbf{The feature-bagging ensemble is our addition, not a native capability.} Every
+result past a model's native feature cap (TabPFN v2: 500; TabICL: 2000) characterizes
+\emph{our wrapper} applied to that model, not the released model in isolation. That
+TabICL shows no visible accuracy cost when moving from native scale to a 5-chunk
+ensemble at $D=10000$ is evidence the specific wrapper we used is a reasonable
+workaround in this setting, not evidence about the underlying model's behavior past
+its cap if it were retrained or extended to handle more features natively.
+
+\textbf{Compute constraints.} All experiments ran on CPU (Apple Silicon M1 Max,
+34GB RAM, no CUDA); TabPFN v2 and TabICL are primarily validated and optimized for GPU
+inference, so absolute wall-clock numbers here (Section~\ref{sec:setup}) are not
+representative of production latency, and we were forced to fix
+\verb|n_estimators=1| for both foundation models to stay within available memory,
+which likely understates their best achievable accuracy at any given $D$.
+
+\textbf{Licensing.} TabPFN v2 and later PriorLabs checkpoints are released under a
+non-commercial research license; TabICL is BSD-3-Clause.
+
+\textbf{Scope of the generative model.} A single fixed nonlinear true function and one
+specific derived-feature construction were used throughout; results characterize this
+generative family, not dimensionality scaling in general. In particular, the
+RidgeCV-overtakes-trees effect above is a direct consequence of this specific
+construction and should not be over-generalized.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-TODO.
+We built a synthetic benchmark that isolates ambient feature dimensionality from
+signal dimensionality -- a fixed 5-feature nonlinear true model embedded in up to
+10,000 features -- and used it to test whether a tabular foundation model's accuracy
+degrades as $D$ grows past its trained regime. For TabICL, under a
+feature-bagging ensemble applied beyond its native 2000-feature cap, we found no
+such degradation: test $R^2$ stayed within a narrow band (0.899--0.937) across three
+orders of magnitude in $D$, and clearly dominated Ridge, Random Forest, and XGBoost
+baselines throughout. \textbf{TODO: extend this conclusion once TabPFN v2 results are
+available} -- the central open question is whether this robustness is specific to
+TabICL's architecture (which was explicitly designed to scale further than TabPFN)
+or holds for TabPFN's feature-bagging ensemble too. Along the way, our benchmark
+reproduced the double-descent phenomenon at exactly the interpolation threshold for
+an under-regularized linear baseline, which we take as independent evidence the
+pipeline is measuring what it claims to measure.
 
 \section*{Acknowledgements}
-TODO or remove.
+This research was assisted by Claude (Anthropic).
 
 \bibliography{refs}
 \bibliographystyle{icml2025}
