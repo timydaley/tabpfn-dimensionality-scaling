@@ -37,6 +37,15 @@ def test_run_one_ridge_end_to_end():
     assert result.n_train == FIXED_N_TRAIN
     assert result.rmse > 0
     assert result.error == ""
+    assert result.signal_regime == "fixed"
+
+
+def test_run_one_scaling_signal_regime_recorded():
+    result = run_one(
+        "ridge", "fixed_n", d=200, seed=0, signal_regime="scaling", n_val=50, n_test=100
+    )
+    assert result.signal_regime == "scaling"
+    assert result.error == ""
 
 
 def test_run_sweep_writes_all_cells(tmp_path):
@@ -54,6 +63,22 @@ def test_run_sweep_writes_all_cells(tmp_path):
     assert out_csv.exists()
     on_disk = pd.read_csv(out_csv)
     assert len(on_disk) == len(df)
+    assert (df["error"] == "").all()
+    assert (df["signal_regime"] == "fixed").all()  # default when signal_regimes not passed
+
+
+def test_run_sweep_crosses_signal_regimes(tmp_path):
+    df = run_sweep(
+        models=["ridge"],
+        regimes=["fixed_n"],
+        signal_regimes=["fixed", "scaling"],
+        dims=[10, 200],
+        seeds=[0],
+        n_val=20,
+        n_test=20,
+    )
+    assert len(df) == 1 * 1 * 2 * 2 * 1  # models x regimes x signal_regimes x dims x seeds
+    assert set(df["signal_regime"]) == {"fixed", "scaling"}
     assert (df["error"] == "").all()
 
 

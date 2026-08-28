@@ -16,6 +16,7 @@ from tabdim.experiment import run_sweep  # noqa: E402
 DEFAULT_DIMS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
 DEFAULT_MODELS = ["ridge", "random_forest", "xgboost", "tabpfn", "tabicl"]
 DEFAULT_REGIMES = ["fixed_n", "scaling_n"]
+DEFAULT_SIGNAL_REGIMES = ["fixed"]
 DEFAULT_SEEDS = list(range(5))
 
 
@@ -24,6 +25,12 @@ def main():
     parser.add_argument("--dims", type=int, nargs="+", default=DEFAULT_DIMS)
     parser.add_argument("--models", nargs="+", default=DEFAULT_MODELS)
     parser.add_argument("--regimes", nargs="+", default=DEFAULT_REGIMES)
+    parser.add_argument(
+        "--signal-regimes",
+        nargs="+",
+        default=DEFAULT_SIGNAL_REGIMES,
+        help="'fixed': d_true=5 regardless of D. 'scaling': d_true grows with D.",
+    )
     parser.add_argument("--seeds", type=int, nargs="+", default=DEFAULT_SEEDS)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--out", default="results/sweep.csv")
@@ -33,6 +40,7 @@ def main():
     df = run_sweep(
         models=args.models,
         regimes=args.regimes,
+        signal_regimes=args.signal_regimes,
         dims=args.dims,
         seeds=args.seeds,
         device=args.device,

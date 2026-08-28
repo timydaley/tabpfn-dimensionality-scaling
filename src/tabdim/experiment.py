@@ -27,6 +27,7 @@ SCALING_N_MAX = 2000
 class RunResult:
     model: str
     regime: str
+    signal_regime: str
     n_features: int
     n_train: int
     seed: int
@@ -49,6 +50,7 @@ def run_one(
     regime: str,
     d: int,
     seed: int,
+    signal_regime: str = "fixed",
     n_val: int = 500,
     n_test: int = 1000,
     device: str = "cpu",
@@ -56,7 +58,13 @@ def run_one(
 ) -> RunResult:
     n_train = n_train_for_regime(regime, d)
     splits = generate_splits(
-        n_features=d, n_train=n_train, n_val=n_val, n_test=n_test, seed=seed, **spec_kwargs
+        n_features=d,
+        n_train=n_train,
+        n_val=n_val,
+        n_test=n_test,
+        seed=seed,
+        signal_regime=signal_regime,
+        **spec_kwargs,
     )
     model = get_model(model_name, seed=seed, device=device)
 
@@ -68,6 +76,7 @@ def run_one(
     return RunResult(
         model=model_name,
         regime=regime,
+        signal_regime=signal_regime,
         n_features=d,
         n_train=n_train,
         seed=seed,
@@ -82,28 +91,33 @@ def run_sweep(
     regimes: list[str],
     dims: list[int],
     seeds: list[int],
+    signal_regimes: list[str] = ("fixed",),
     device: str = "cpu",
     out_csv: str | Path | None = None,
     **spec_kwargs,
 ) -> pd.DataFrame:
-    """Runs every (model, regime, D, seed) cell, writing results incrementally to
-    out_csv (if given) so a long background run stays safe against crashes and
-    lets progress be inspected mid-run."""
+    """Runs every (model, regime, signal_regime, D, seed) cell, writing results
+    incrementally to out_csv (if given) so a long background run stays safe
+    against crashes and lets progress be inspected mid-run."""
     rows = []
     cells = [
-        (model_name, regime, d, seed)
+        (model_name, regime, signal_regime, d, seed)
         for model_name in models
         for regime in regimes
+        for signal_regime in signal_regimes
         for d in dims
         for seed in seeds
     ]
-    for i, (model_name, regime, d, seed) in enumerate(cells, start=1):
+    for i, (model_name, regime, signal_regime, d, seed) in enumerate(cells, start=1):
         try:
-            result = run_one(model_name, regime, d, seed, device=device, **spec_kwargs)
+            result = run_one(
+                model_name, regime, d, seed, signal_regime=signal_regime, device=device, **spec_kwargs
+            )
         except Exception as exc:  # noqa: BLE001 - a single failed cell shouldn't kill the sweep
             result = RunResult(
                 model=model_name,
                 regime=regime,
+                signal_regime=signal_regime,
                 n_features=d,
                 n_train=n_train_for_regime(regime, d),
                 seed=seed,
@@ -114,7 +128,7 @@ def run_sweep(
             )
         rows.append(asdict(result))
         print(
-            f"[{i}/{len(cells)}] {model_name} {regime} D={d} seed={seed} "
+            f"[{i}/{len(cells)}] {model_name} {regime} signal={signal_regime} D={d} seed={seed} "
             f"r2={result.r2:.3f} ({result.fit_predict_seconds:.1f}s)"
             + (f" ERROR: {result.error}" if result.error else ""),
             flush=True,
