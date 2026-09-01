@@ -11,6 +11,7 @@ dependencies = [
     "xgboost",
     "tabpfn",
     "tabicl",
+    "synthefy-nori",
     "matplotlib",
     "seaborn",
 ]

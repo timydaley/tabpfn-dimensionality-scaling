@@ -69,6 +69,16 @@ _FOUNDATION_MODEL_N_ESTIMATORS = 1
 
 
 def make_tabpfn(seed: int, device: str = "cpu") -> SklearnStyleModel:
+    import os
+
+    # TabPFN's default model version (v2.5+) is gated behind an interactive
+    # browser-based license acceptance at ux.priorlabs.ai. The original v2 weights
+    # (Prior-Labs/TabPFN-v2-reg on Hugging Face) are not gated -- plain
+    # huggingface_hub download, no login/token required -- so pin to v2 to keep
+    # this fully non-interactive. Must be set before the first `import tabpfn`
+    # in the process, since tabpfn reads it into a settings singleton at import
+    # time; setdefault so an explicit caller override still wins.
+    os.environ.setdefault("TABPFN_MODEL_VERSION", "v2")
     from tabpfn import TabPFNRegressor
 
     return SklearnStyleModel(
@@ -79,6 +89,25 @@ def make_tabpfn(seed: int, device: str = "cpu") -> SklearnStyleModel:
             n_estimators=_FOUNDATION_MODEL_N_ESTIMATORS,
         )
     )
+
+
+def make_nori(seed: int, device: str = "cpu") -> SklearnStyleModel:
+    # Nori (Synthefy) publishes no hard feature-count cap analogous to TabPFN's 500
+    # or TabICL's ~2000 -- its documented constraint is O(N^2) sample attention
+    # over rows, not columns, and N_train is capped at 2000 throughout this sweep
+    # regardless of D. So unlike TabPFN/TabICL it is run natively across the full
+    # D grid with no feature-bagging ensemble; if it does degrade or fail at high
+    # D that is itself a result worth reporting; run_sweep's per-cell try/except
+    # already records that gracefully.
+    #
+    # `device` is intentionally ignored: measured on this machine, repeated
+    # NoriRegressor instantiations within one long-running process leak MPS
+    # memory (no release between calls) and reliably OOM the shared MPS pool
+    # after ~25 calls, while giving only a ~15% speedup over CPU (vs TabPFN's
+    # ~6x) -- not worth the crash risk in a multi-hour sweep. Always run on CPU.
+    from synthefy_nori import NoriRegressor
+
+    return SklearnStyleModel(NoriRegressor(model="nori-6m", device="cpu"))
 
 
 def make_tabicl(seed: int, device: str = "cpu") -> SklearnStyleModel:
@@ -158,6 +187,7 @@ MODEL_REGISTRY: dict[str, Callable[..., object]] = {
     "xgboost": lambda seed, device="cpu": make_xgboost(seed),
     "tabpfn": make_tabpfn_ensemble,
     "tabicl": make_tabicl_ensemble,
+    "nori": lambda seed, device="cpu": make_nori(seed, device=device),
 }
 
 

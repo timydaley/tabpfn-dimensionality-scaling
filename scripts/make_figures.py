@@ -13,6 +13,7 @@ MODEL_LABELS = {
     "xgboost": "XGBoost",
     "tabpfn": "TabPFN v2",
     "tabicl": "TabICL",
+    "nori": "Nori",
 }
 REGIME_LABELS = {
     "fixed_n": "Fixed training set size",

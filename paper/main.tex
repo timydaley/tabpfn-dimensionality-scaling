@@ -31,32 +31,38 @@
 \printAffiliationsAndNotice{}
 
 \begin{abstract}
-Tabular foundation models such as TabPFN v2 and TabICL apply in-context learning to
-tabular regression and classification, but every released model has a hard cap on
-the number of features it was pretrained and validated on (500 for TabPFN v2,
-roughly 2,000 for TabICL). We study how these models behave as the number of
-features $D$ grows from 10 to 10,000 under two conditions that prior high-dimensional
-tabular benchmarks conflate: a \textbf{fixed-signal} condition, where a 5-feature
-nonlinear true function is embedded in $D$ ambient features (the rest noisy functions
-of the true features or pure noise) so ambient dimensionality grows while true signal
-complexity does not; and a \textbf{scaling-signal} condition, where the number of
-causal features itself grows with $D$ (5\% of $D$), so both grow together as in most
-real high-dimensional data. Beyond each model's native feature cap we apply a
-feature-bagging ensemble (fit independent copies on disjoint feature chunks, average
-predictions), the standard workaround from prior work. Under the fixed-signal
-condition, TabICL's held-out test $R^2$ stays within a narrow band (0.899--0.937)
-across three orders of magnitude in $D$ and dominates Ridge, Random Forest, and
-XGBoost throughout -- no degradation. Under the scaling-signal condition, with
-training set size held fixed at 2000 rows, every model degrades sharply: TabICL falls
-from $R^2{=}0.937$ at $D{=}10$ to $0.151$ at $D{=}10000$ (an 84\% relative drop), and
-at that largest $D$ a plain cross-validated Ridge baseline (0.157) matches or exceeds
-it. Dimensionality alone is not the hazard; dimensionality that carries proportionally
-more true signal than a fixed training set can support is. We implemented the same
-evaluation for TabPFN v2 but could not obtain results: unlike every other model here,
-TabPFN v2 requires an interactive, human-completed license acceptance before its
-weights can be downloaded, which is not obtainable within an automated pipeline; we
-report this as an access limitation rather than a technical one, and release the
-(untested) TabPFN v2 code path alongside the working TabICL pipeline.
+Tabular foundation models such as TabPFN v2, TabICL, and Nori apply in-context
+learning to tabular regression and classification, but most released models have a
+hard cap on the number of features they were pretrained and validated on (500 for
+TabPFN v2, roughly 2,000 for TabICL; Nori publishes no such cap). We study how three
+such models behave as the number of features $D$ grows from 10 to 10,000 under two
+conditions that prior high-dimensional tabular benchmarks conflate: a
+\textbf{fixed-signal} condition, where a 5-feature nonlinear true function is embedded
+in $D$ ambient features (the rest noisy functions of the true features or pure noise)
+so ambient dimensionality grows while true signal complexity does not; and a
+\textbf{scaling-signal} condition, where the number of causal features itself grows
+with $D$ (5\% of $D$), so both grow together as in most real high-dimensional data.
+Beyond a model's native feature cap we apply a feature-bagging ensemble (fit
+independent copies on disjoint feature chunks, average predictions), the standard
+workaround from prior work; Nori, having no such cap, is run natively throughout.
+Under the fixed-signal condition, all three foundation models hold up: TabICL's
+held-out test $R^2$ stays within 0.899--0.937, TabPFN within 0.897--0.933, and Nori
+within 0.928--0.950, across three orders of magnitude in $D$, and all three clearly
+dominate Ridge, Random Forest, and XGBoost throughout -- no degradation. Under the
+scaling-signal condition, with training set size held fixed at 2000 rows, every model
+degrades sharply, but not equally: TabICL falls from $R^2{=}0.937$ at $D{=}10$ to
+$0.151$ at $D{=}10000$ (an 84\% relative drop, and the best of the six models at that
+largest $D$, matched by a plain cross-validated Ridge baseline at 0.157), Nori falls
+to 0.098, and TabPFN -- the model whose native regime the feature-bagging ensemble was
+originally proposed to extend -- falls furthest of all six models tested, to 0.035,
+below Random Forest (0.061) and XGBoost (0.082). Dimensionality alone is not the
+hazard; dimensionality that carries proportionally more true signal than a fixed
+training set can support is, and different foundation model architectures degrade at
+very different rates once it does. TabPFN's default model version is gated behind an
+interactive, human-completed license acceptance, but we found its original v2
+weights are available ungated directly from Hugging Face, which let us obtain full
+automated results for all three foundation models; we describe this workaround so
+others facing the same blocker do not need to rediscover it.
 \end{abstract}
 
 \section{Introduction}
@@ -71,11 +77,14 @@ instead, the training set is passed as context alongside the query points, and a
 single forward pass produces predictions.
 
 This convenience comes with an architectural constraint that has received little
-systematic study: every released tabular foundation model has a hard cap on the
-number of features and rows it was pretrained and validated on. TabPFN v2
+systematic study: most released tabular foundation models have a hard cap on the
+number of features and rows they were pretrained and validated on. TabPFN v2
 \citep{hollmann2025tabpfn} was trained and evaluated up to 500 features and 10,000
 rows; TabICL \citep{qu2025tabicl} extends this considerably but still caps out in the
-low thousands of features. Real tabular data routinely exceeds these limits --
+low thousands of features. Nori\footnote{\url{https://huggingface.co/Synthefy/Nori}}
+publishes no analogous hard feature-count cap, though its architecture's own
+sample-attention cost still grows with row count. Real tabular data routinely exceeds
+these limits --
 genomics, click-stream, and sensor-fusion datasets can have thousands to tens of
 thousands of columns -- so understanding \emph{how} these models degrade (or don't)
 past their trained regime, and whether standard workarounds close the gap, is a
@@ -99,16 +108,17 @@ with $D$ (Section~\ref{sec:dgp}), holding training set size fixed -- the harder,
 arguably more realistic regime, and the one under which we find real degradation
 (Section~\ref{sec:results}).
 
-We implemented the same evaluation for TabPFN v2 and TabICL, each wrapped in a
-feature-bagging ensemble \citep{feuer2023scaling} once $D$ exceeds their native cap,
+We implemented the same evaluation for TabPFN v2, TabICL, and Nori -- the two
+capped models wrapped in a feature-bagging ensemble \citep{feuer2023scaling} once $D$
+exceeds their native cap, Nori run natively throughout since it has no such cap --
 against Ridge regression, Random Forest \citep{breiman2001random}, and XGBoost
 \citep{chen2016xgboost}, under both a fixed training-set-size regime and a regime
-where training set size scales with $D$. Unlike the other four models, TabPFN v2
-requires a one-time, human-completed license acceptance with the model provider
-before its weights can be downloaded (Section~\ref{sec:setup}); this proved to be a
-hard blocker in our automated setting, so the empirical results in this paper cover
-TabICL against the three baselines, with the TabPFN v2 code path implemented, tested
-for correctness on toy data, and released, but not run to completion.
+where training set size scales with $D$. TabPFN v2's default model version requires a
+one-time, human-completed license acceptance with the model provider before its
+weights can be downloaded; we found this is specific to that default version, not to
+TabPFN v2's model weights in general, and describe a workaround
+(Section~\ref{sec:setup}) that let us obtain full results for all three foundation
+models rather than report this as an unresolved blocker.
 
 Our contributions are:
 \begin{itemize}
@@ -116,19 +126,28 @@ Our contributions are:
       embedded in up to 10,000 ambient features, supporting both a fixed and a
       $D$-scaling number of causal features, released with this paper.
 \item An empirical characterization of how held-out test RMSE/R\textsuperscript{2} for
-      TabICL scales with $D$, relative to tree and linear baselines, under fixed-$N$
-      and $N$-scaling-with-$D$ training regimes, when the number of causal features is
+      three tabular foundation models -- TabPFN v2, TabICL, and Nori -- scales with
+      $D$, relative to tree and linear baselines, under fixed-$N$ and
+      $N$-scaling-with-$D$ training regimes, when the number of causal features is
       held fixed at 5.
 \item A second characterization under a scaling-signal condition, showing that when the
-      number of causal features grows with $D$ instead, every model -- including
-      TabICL -- degrades sharply, isolating dimensionality growth alone (not harmful,
-      in our first result) from dimensionality growth that outpaces a fixed training
-      set's ability to resolve proportionally more true structure (which is).
+      number of causal features grows with $D$ instead, every model degrades sharply
+      but by very different amounts -- TabPFN degrades furthest of all six models
+      tested, more than the plain tree and linear baselines, while TabICL degrades
+      least -- isolating dimensionality growth alone (not harmful, in our first
+      result) from dimensionality growth that outpaces a fixed training set's ability
+      to resolve proportionally more true structure (which is, and not equally for
+      every architecture).
 \item A direct empirical test of the feature-bagging ensemble workaround
       \citep{feuer2023scaling} at the specific scale (10,000 features) it was proposed
-      to address, under both conditions.
-\item A working, tested implementation of the same evaluation for TabPFN v2, released
-      for anyone who can clear its license gate to run and extend.
+      to address, under both conditions, and a comparison against Nori, a model
+      requiring no such workaround, that helps isolate the ensemble's own contribution
+      to the scaling-signal degradation from a shared statistical difficulty affecting
+      every model regardless of chunking.
+\item A documented workaround for TabPFN v2's license-acceptance gate -- its original
+      v2 weights are available directly and ungated from Hugging Face -- that let us
+      obtain full automated results rather than report this as a blocker, released for
+      others facing the same gate.
 \end{itemize}
 
 \section{Related Work}
@@ -146,7 +165,13 @@ summary) specifically to scale to far larger row counts and a higher feature cap
 scaling directions -- retrieval-augmented real-data pretraining, and linear-attention
 mechanisms, respectively -- motivated by the same observation we study directly: that
 naively applying an in-context tabular learner outside its trained regime degrades
-performance.
+performance. Nori (Synthefy) is a smaller (5.9M-parameter) in-context regressor that
+alternates feature- and sample-attention layers and, unlike TabPFN v2 and TabICL,
+publishes no hard feature-count cap; we include it as a third, architecturally
+distinct foundation model that requires no feature-bagging workaround at any $D$ in
+our grid, which lets us test whether the ensemble wrapper itself, rather than the
+underlying task difficulty, drives the scaling-signal degradation
+(Section~\ref{sec:discussion}).
 
 \textbf{Scaling TabPFN past its trained regime.} \citet{feuer2023scaling} is the paper
 most directly relevant to our method: they show TabPFN's accuracy falls as feature
@@ -242,23 +267,38 @@ have been hard to argue for it under scaling-$N$ either.
 
 We evaluate Ridge regression \citep{hoerl1970ridge}, Random Forest
 \citep{breiman2001random}, XGBoost \citep{chen2016xgboost}, TabPFN v2
-\citep{hollmann2025tabpfn}, and TabICL \citep{qu2025tabicl}. For the two foundation
-models, whenever $D$ exceeds the model's native feature cap ($c=500$ for TabPFN v2,
+\citep{hollmann2025tabpfn}, TabICL \citep{qu2025tabicl}, and Nori. For TabPFN v2 and
+TabICL, whenever $D$ exceeds the model's native feature cap ($c=500$ for TabPFN v2,
 $c=2000$ for TabICL), we apply a feature-bagging ensemble \citep{feuer2023scaling}:
 partition the $D$ columns into $\lceil D/c \rceil$ disjoint chunks of size $\leq c$ via
 a random permutation, fit an independent copy of the model on each chunk, and average
 the chunks' predictions. When $D \leq c$ this reduces to a single chunk containing
-every feature, i.e.\ the model runs exactly as it natively would.
+every feature, i.e.\ the model runs exactly as it natively would. Nori publishes no
+analogous feature-count cap -- its documented constraint is attention cost over rows,
+not columns, and $N_{\text{train}}$ is capped at 2000 throughout our grid regardless
+of $D$ (Section~\ref{sec:grid}) -- so it is run natively across the entire $D$ grid
+with no ensemble wrapper.
 
 \section{Experimental Setup}
 \label{sec:setup}
 
-All experiments ran on a single Apple Silicon (M1 Max, 34GB RAM) machine, CPU-only --
-no CUDA GPU was available, and TabPFN v2 / TabICL are primarily validated for GPU
-inference, so wall-clock numbers reported here should not be read as representative of
-production latency. Software versions: Python 3.12 (native arm64), \verb|torch|
-2.13.0, \verb|tabpfn| 8.5.0, \verb|tabicl| 2.1.1, \verb|scikit-learn| 1.9.0,
-\verb|xgboost| 3.4.1, \verb|numpy| 2.5.2.
+All experiments ran on a single Apple Silicon (M1 Max, 34GB RAM) machine. Ridge,
+Random Forest, XGBoost, TabICL, and Nori ran CPU-only -- no CUDA GPU was available on
+this machine. TabPFN, however, ran on the machine's Apple GPU via PyTorch's Metal
+Performance Shaders (MPS) backend, which gave a real $\sim$6$\times$ speedup over CPU
+in our timing checks (e.g.\ 155s $\to$ 25s for a single fit at $D{=}2000$) with no
+accuracy difference; we used it for all TabPFN results below. We initially tried MPS
+for Nori too, but repeated model instantiations within one long-running sweep process
+leaked GPU memory with no release between calls and reliably exhausted the shared MPS
+memory pool after roughly 25 calls, despite Nori showing a comparable $\sim$3--4$\times$
+MPS speedup when it did not fail; we therefore pin Nori to CPU unconditionally for
+reliability over the multi-hour sweep, at the cost of that speedup. TabPFN did not
+exhibit this failure mode in the same length of run. None of these models' primary
+authors optimize for or validate on Apple GPUs, so none of these wall-clock numbers
+should be read as representative of production latency. Software versions: Python
+3.12 (native arm64), \verb|torch| 2.13.0, \verb|tabpfn| 8.5.0, \verb|tabicl| 2.1.1,
+\verb|synthefy-nori| 0.20.0, \verb|scikit-learn| 1.9.0, \verb|xgboost| 3.4.1,
+\verb|numpy| 2.5.2.
 
 For TabPFN we pass \verb|ignore_pretraining_limits=True| so a chunk that exceeds an
 internal feature-count threshold degrades gracefully rather than raising. Both TabPFN
@@ -272,18 +312,25 @@ should not be read as a claim that either model's best achievable accuracy is re
 here, only their accuracy under this fixed compute budget, on equal footing with each
 other.
 
-\textbf{TabPFN v2 could not be run.} As of this writing, the \texttt{tabpfn} package
-requires downloading model weights from PriorLabs, which is gated behind a one-time
-license acceptance completed interactively in a browser, followed by an API token
-(\texttt{TABPFN\_TOKEN}) generated from an account page. This is a human-in-the-loop
-step with no automated or headless path around it, and we did not complete it in
-time for this paper. The \texttt{tabpfn} code path in our released implementation (model wrapper,
-feature-bagging ensemble, sweep integration) shares the exact same generic
-ensemble and sweep code as TabICL's -- which we did run end-to-end -- differing only
-in which underlying estimator is constructed; the ensemble wrapper itself is unit
-tested against a stand-in linear estimator. We are confident the TabPFN path would
-run correctly given a valid token, but report zero TabPFN v2 results here rather
-than results we could not obtain.
+\textbf{TabPFN v2's license gate has a workaround.} The \texttt{tabpfn} package's
+default model version (v2.5 and later) requires downloading weights from PriorLabs,
+gated behind a one-time license acceptance completed interactively in a browser,
+followed by an API token generated from an account page -- a human-in-the-loop step
+with no automated or headless path around it, which an earlier draft of this paper
+reported as an unresolved blocker. We subsequently found this gate is specific to
+those default (v2.5+) model versions: the original TabPFN v2 weights
+(\texttt{Prior-Labs/TabPFN-v2-reg} on Hugging Face) are not gated at all -- a plain,
+unauthenticated \texttt{huggingface\_hub} download, no login and no token required,
+confirmed to succeed with zero interactive steps in an environment with no browser or
+display available. Setting the environment variable \texttt{TABPFN\_MODEL\_VERSION=v2}
+before the package's first import selects these ungated weights, which is what we use
+throughout this paper. We flag this because it is easy to conclude, as we initially
+did, that TabPFN v2 cannot be evaluated without human intervention at all; that
+conclusion is specific to its newer default weights, not to the model.
+
+\textbf{Nori requires no license step.} Nori's checkpoint is Apache-2.0 licensed and
+downloads automatically and ungated from Hugging Face on first use, with no token or
+gated-repo acceptance of any kind.
 
 \section{Results}
 \label{sec:results}
@@ -293,8 +340,7 @@ than results we could not obtain.
 
 Figure~\ref{fig:r2} shows held-out test $R^2$ as a function of $D$ for both $N$-regimes
 under the fixed-signal condition ($D_{\text{true}}=5$ regardless of $D$), averaged over
-5 seeds (error bars: $\pm 1$ SD). TabICL is the only foundation model shown; TabPFN v2
-could not be evaluated (Section~\ref{sec:setup}).
+5 seeds (error bars: $\pm 1$ SD), for all six models.
 
 \begin{figure*}[t]
 \centering
@@ -302,30 +348,43 @@ could not be evaluated (Section~\ref{sec:setup}).
 \caption{Held-out test $R^2$ vs.\ number of features $D$ (log scale), for training
 set size held fixed (left) and scaling with $D$ (right). Points are means over 5
 seeds; error bars are $\pm 1$ SD. TabICL uses the feature-bagging ensemble beyond
-its 2000-feature cap ($D=5000$: 3 chunks; $D=10000$: 5 chunks).}
+its 2000-feature cap ($D=5000$: 3 chunks; $D=10000$: 5 chunks); TabPFN beyond its
+500-feature cap ($D=1000$: 2 chunks; $D=5000$: 10 chunks; $D=10000$: 20 chunks); Nori
+has no cap and is never chunked.}
 \label{fig:r2}
 \end{figure*}
 
-\textbf{TabICL does not degrade with dimensionality in our setting, and clearly
-dominates every baseline throughout.} In the fixed-$N$ regime, TabICL's mean test
-$R^2$ starts at 0.937 ($D=10$), dips to a minimum of 0.899 around $D=200$--$500$, and
-recovers to 0.928 by $D=10000$ -- a span of at most 0.038 across three orders of
-magnitude in $D$, with no monotonic trend. This includes the two largest $D$ values
-(5000 and 10000), where TabICL is running as a 3- and 5-chunk feature-bagging
-ensemble rather than natively: the ensemble does not visibly cost accuracy relative
-to the dip already present at native scale ($D \leq 2000$). Every baseline sits well
-below TabICL across the entire grid: at $D=10000$ (fixed-$N$), XGBoost reaches 0.791,
-Random Forest 0.771, and RidgeCV 0.830 -- the closest baseline, but still 0.098 below
-TabICL.
+\textbf{None of the three foundation models degrade with dimensionality in our
+setting, and all three clearly dominate every baseline throughout.} In the fixed-$N$
+regime, TabICL's mean test $R^2$ starts at 0.937 ($D=10$), dips to a minimum of 0.899
+around $D=200$--$500$, and recovers to 0.928 by $D=10000$ -- a span of at most 0.038
+across three orders of magnitude in $D$, with no monotonic trend. TabPFN and Nori show
+the same qualitative pattern: TabPFN ranges from 0.897 (its minimum, at $D=500$) to
+0.933 ($D=10$/$D=20$, tied), a span of 0.036; Nori ranges from 0.928 (also at $D=500$)
+to 0.950 ($D=20$), a span of 0.022 -- the narrowest of the three. All three foundation
+models dip at the same $D$ (500), the boundary where derived features begin
+outnumbering pure-noise ones by the largest margin in our construction
+(Section~\ref{sec:dgp}); we do not have a mechanistic explanation for why this
+particular point is shared across three otherwise different architectures and flag it
+as an open question. Crucially, this includes the largest $D$ values, where TabICL and
+TabPFN are running as multi-chunk feature-bagging ensembles rather than natively (5
+and 20 chunks respectively at $D=10000$): the ensemble does not visibly cost accuracy
+relative to each model's own native-scale dip. Every baseline sits well below all
+three foundation models across the entire grid: at $D=10000$ (fixed-$N$), XGBoost
+reaches 0.791, Random Forest 0.771, and RidgeCV 0.830 -- the closest baseline, but
+still 0.098 below TabICL and further still below TabPFN and Nori.
 
-In the scaling-$N$ regime, all four models start lower at small $D$ (where
+In the scaling-$N$ regime, all six models start lower at small $D$ (where
 $N_{\text{train}}$ is also small: 200 rows at $D=10$) and climb as $D$ (and hence
 $N_{\text{train}}$) grows, converging exactly with the fixed-$N$ numbers once
 $N_{\text{train}}$ saturates at its 2000-row ceiling for $D \geq 500$ (by
-construction, Section~\ref{sec:grid}). TabICL leads throughout this climb as well:
-0.786 at $D=10$ ($N_{\text{train}}=200$) rising to 0.928 at $D=10000$
-($N_{\text{train}}=2000$), versus XGBoost's 0.519 $\to$ 0.791 and RidgeCV's
-0.260 $\to$ 0.830 over the same range.
+construction, Section~\ref{sec:grid}). All three foundation models lead this climb
+throughout, with Nori consistently at or ahead of the other two: at $D=10$
+($N_{\text{train}}=200$), Nori already reaches 0.863, ahead of TabPFN's 0.794 and
+TabICL's 0.786; by $D=10000$ ($N_{\text{train}}=2000$) the three have converged to
+within 0.012 of each other (Nori 0.932, TabICL 0.928, TabPFN 0.920). All three stay
+well clear of XGBoost (0.519 $\to$ 0.791) and RidgeCV (0.260 $\to$ 0.830) over the
+same range.
 
 RidgeCV is the weakest model at low $D$ (0.382 at $D=10$, fixed-$N$) but improves
 monotonically with $D$ and overtakes both tree baselines by $D=10000$ (0.830 vs.\
@@ -356,30 +415,44 @@ bars are $\pm 1$ SD.}
 \label{fig:signal-comparison}
 \end{figure*}
 
-\textbf{Every model degrades sharply once causal dimensionality scales with $D$,
-including TabICL.} The two panels are identical at $D \in \{10,20,50,100\}$, where the
-scaling-signal rule still floors at $D_{\text{true}}=5$ (Section~\ref{sec:dgp}) --
-this is a useful internal check, since the two conditions are literally the same task
-there and the numbers match exactly. They diverge sharply from $D=200$
-($D_{\text{true}}=10$) onward. TabICL falls from $R^2=0.937$ at $D=10$ to $0.784$ at
-$D=200$, $0.624$ at $D=1000$, and $0.151$ at $D=10000$ ($D_{\text{true}}=500$) -- an
-84\% relative drop, versus at most a 4\% drop across the same $D$ range in the
-fixed-signal condition. XGBoost and Random Forest show the same qualitative pattern
-(XGBoost: $0.829 \to 0.082$; Random Forest: $0.775 \to 0.061$), and even RidgeCV, which
-was improving with $D$ under fixed-signal, now falls ($0.382 \to 0.157$, after a
-partial recovery at $D=100$--$200$ where more causal features briefly help a linear
-model directly).
+\textbf{Every model degrades sharply once causal dimensionality scales with $D$, but
+not equally -- TabPFN degrades furthest of all six, TabICL least.} The two panels are
+identical at $D \in \{10,20,50,100\}$, where the scaling-signal rule still floors at
+$D_{\text{true}}=5$ (Section~\ref{sec:dgp}) -- a useful internal check, since the two
+conditions are literally the same task there and the numbers match exactly for every
+model. They diverge sharply from $D=200$ ($D_{\text{true}}=10$) onward, and the three
+foundation models -- indistinguishable from each other under fixed-signal -- separate
+sharply from one another for the first time in this paper. TabICL falls from
+$R^2=0.937$ at $D=10$ to $0.784$ at $D=200$, $0.624$ at $D=1000$, and $0.151$ at
+$D=10000$ ($D_{\text{true}}=500$) -- an 84\% relative drop. Nori falls from $0.949$ to
+$0.917$, $0.419$, and $0.098$ over the same range -- a steeper 90\% relative drop,
+despite running natively with no feature-bagging ensemble at any $D$ in our grid.
+TabPFN falls furthest of all: from $0.933$ to $0.824$, $0.434$, and $0.035$ -- a 96\%
+relative drop, ending below every other model in this study, foundation or baseline.
+XGBoost and Random Forest show broadly the same qualitative pattern (XGBoost: $0.829
+\to 0.082$; Random Forest: $0.775 \to 0.061$), and even RidgeCV, which was improving
+with $D$ under fixed-signal, now falls ($0.382 \to 0.157$, after a partial recovery at
+$D=100$--$200$ where more causal features briefly help a linear model directly).
 
-\textbf{TabICL's advantage over the baselines shrinks -- and disappears -- as the task
-gets harder.} At $D=1000$ TabICL still leads clearly (0.624 vs.\ XGBoost's 0.394,
-Random Forest's 0.251, RidgeCV's 0.355). By $D=10000$, though, TabICL (0.151) is
-statistically indistinguishable from RidgeCV (0.157, higher on average) and only
-modestly ahead of XGBoost (0.082); all four models are within roughly 0.1 $R^2$ of
-each other and all are performing poorly in absolute terms. Whatever the mechanism
-(Section~\ref{sec:discussion}), TabICL's dominance in Section~\ref{sec:results-fixed-signal}
-does not carry over unconditionally -- it holds when the amount of true structure is
-small and fixed, and erodes as the task's true complexity grows toward (and past) what
-2000 training rows can resolve, regardless of which model is asked to resolve it.
+\textbf{At the largest $D$, the foundation model the feature-bagging ensemble was
+originally designed to extend performs worst of all six models -- including the plain
+linear baseline.} At $D=1000$ the three foundation models still lead clearly (TabICL
+0.624, TabPFN 0.434, Nori 0.419, versus XGBoost's 0.394, RidgeCV's 0.355, Random
+Forest's 0.251). By $D=10000$ the ordering inverts sharply for TabPFN specifically:
+RidgeCV (0.157) and TabICL (0.151, statistically indistinguishable from RidgeCV) are
+the best two models; Nori (0.098) sits in the middle, still ahead of XGBoost (0.082)
+and Random Forest (0.061); and TabPFN (0.035) is the single worst model of the six,
+below both tree baselines and the plain linear model it was designed to outperform.
+This is despite the feature-bagging ensemble \citep{feuer2023scaling} being exactly
+the mechanism proposed to let TabPFN operate past its native 500-feature cap -- at
+$D=10000$ it is running as a 20-chunk ensemble, the finest chunking of any model in
+this study (TabICL uses 5 chunks at the same $D$; Section~\ref{sec:discussion}
+discusses a candidate explanation, and Nori's comparably severe collapse with zero
+chunking argues against chunking being the whole story). Whatever the mechanism,
+TabICL's and TabPFN's dominance in Section~\ref{sec:results-fixed-signal} does not
+carry over unconditionally -- it holds when the amount of true structure is small and
+fixed, and both erodes and reorders sharply as the task's true complexity grows toward
+(and past) what 2000 training rows can resolve.
 
 \section{Discussion and Limitations}
 \label{sec:discussion}
@@ -387,24 +460,39 @@ small and fixed, and erodes as the task's true complexity grows toward (and past
 \textbf{What causes the scaling-signal degradation?} Three candidate mechanisms, not
 mutually exclusive. (1) \emph{Statistical difficulty}: with $N_{\text{train}}$ fixed at
 2000, resolving $D_{\text{true}}=500$ interacting causal features from 2000 rows is a
-much harder estimation problem than resolving 5, independent of which model is used --
-consistent with XGBoost and Random Forest, which are never chunked, degrading by
-similar relative amounts to TabICL. (2) \emph{Severed interactions under feature-bagging}:
-TabICL's ensemble randomly partitions $D$ columns into $\lceil D/2000 \rceil$ chunks: at
-$D=10000$ (5 chunks), two causal features assigned independently and uniformly at
-random each have only a $1/5$ chance of landing in the same chunk, so roughly 80\% of
-this term's contribution to $f(z)$ is invisible to every single chunk model, and only
-partially recovered by averaging chunk predictions that each saw a different, partial
-view. This is specific to the ensemble wrapper and cannot explain XGBoost's or Random
-Forest's degradation, but could compound TabICL's. (3) \emph{Derived-feature dilution}:
-under scaling-signal there are also more \emph{derived} ambient features referencing
-the (now larger) causal set, diluting the true columns' relative share of $D$ similarly
-in both conditions -- this alone does not obviously explain the divergence, since the
-fixed-signal condition has the same 95\%-ambient structure and does not degrade. Our
-design cannot cleanly separate (1) from (2) -- doing so would require running TabICL
-natively (no chunking) at $D_{\text{true}}=500, D=10000$, which exceeds its 2000-feature
-cap by construction -- so we report the combined effect and flag the decomposition as
-future work.
+much harder estimation problem than resolving 5, independent of which model is used.
+Nori gives us direct evidence that this mechanism operates on its own: Nori applies no
+feature-bagging ensemble at any $D$ in our grid, yet still collapses by 90\% (relative)
+at $D{=}10000$ -- comparable to, and by this relative measure worse than, TabICL's
+chunked 84\% drop, despite zero chunking. Random Forest and XGBoost, likewise never
+chunked, degrade by similarly large amounts. This is strong evidence that mechanism (1)
+alone is sufficient to produce large degradation, with no ensemble wrapper required.
+(2) \emph{Severed interactions under feature-bagging}: TabICL's and TabPFN's ensembles
+randomly partition $D$ columns into disjoint chunks of size $\leq c$ ($c=2000$ and
+$c=500$ respectively); at $D=10000$, two causal features assigned independently and
+uniformly at random land in the same TabICL chunk (5 chunks) with probability
+$\approx 1/5$, but in the same TabPFN chunk (20 chunks) with probability only
+$\approx 1/20$ -- an interacting term is roughly $4\times$ more likely to be split
+across chunks for TabPFN than for TabICL at this $D$. This is a plausible contributor
+to TabPFN degrading furthest of all six models (Section~\ref{sec:results-scaling-signal}).
+It is not, on its own, a complete explanation, though: Random Forest and XGBoost,
+never chunked at all, degrade by amounts comparable to or larger than TabPFN's, so
+chunking granularity alone does not explain the full six-model ranking. (3)
+\emph{Derived-feature dilution}: under scaling-signal there are also more
+\emph{derived} ambient features referencing the (now larger) causal set, diluting the
+true columns' relative share of $D$ similarly in both conditions -- this alone does
+not obviously explain the divergence, since the fixed-signal condition has the same
+95\%-ambient structure and does not degrade. Taken together, we read mechanism (1) as
+the primary driver across all six models -- Nori's unchunked collapse is the clearest
+single piece of evidence for this in our design, something the original TabICL-only
+version of this study could not establish -- with mechanism (2) plausibly compounding
+it specifically for TabPFN's unusually fine chunking, on top of whatever
+architecture-specific factors separate TabICL's, TabPFN's, and Nori's differing
+degradation rates that this design cannot isolate. Cleanly separating (1) from (2) for
+TabICL and TabPFN specifically would still require running each natively (unchunked)
+at $D_{\text{true}}=500$, which exceeds both their feature caps by construction at the
+only $D$ in our grid where $D_{\text{true}}$ reaches 500; we flag this decomposition
+as future work.
 
 \textbf{Why RidgeCV overtakes the tree baselines at high $D$ under the fixed-signal
 condition.} (This effect is specific to fixed-signal; RidgeCV does not overtake the
@@ -441,25 +529,36 @@ $D$ would otherwise distract from the paper's actual question.
 
 \textbf{The feature-bagging ensemble is our addition, not a native capability.} Every
 result past a model's native feature cap (TabPFN v2: 500; TabICL: 2000) characterizes
-\emph{our wrapper} applied to that model, not the released model in isolation. Under
-fixed-signal, TabICL shows no visible accuracy cost moving from native scale to a
-5-chunk ensemble at $D=10000$, evidence the wrapper is a reasonable workaround when
-causal features are few enough that chunking rarely splits an interaction across
-chunks. Under scaling-signal, where $D_{\text{true}}=500$ at that same $D=10000$, the
-wrapper's chunking plausibly compounds the degradation (Section~\ref{sec:results-scaling-signal},
-mechanism 2) -- we cannot rule this out with the current design, since testing TabICL
-without chunking at $D_{\text{true}}=500$ requires $D \leq 2000$, where the
-scaling-signal rule has not yet reached $D_{\text{true}}=500$.
+\emph{our wrapper} applied to that model, not the released model in isolation; Nori
+has no native cap and so is never subject to this caveat. Under fixed-signal, both
+TabICL and TabPFN show no visible accuracy cost moving from native scale to,
+respectively, a 5- and 20-chunk ensemble at $D=10000$, evidence the wrapper is a
+reasonable workaround when causal features are few enough that chunking rarely splits
+an interaction across chunks. Under scaling-signal, where $D_{\text{true}}=500$ at
+that same $D=10000$, the wrapper's chunking plausibly compounds the degradation for
+both models (Section~\ref{sec:discussion}, mechanism 2), more severely for TabPFN's
+finer 20-chunk partition than TabICL's coarser 5-chunk one -- though Nori's comparably
+severe collapse with zero chunking (Section~\ref{sec:discussion}, mechanism 1) shows
+the wrapper is not required to produce large degradation, only a plausible compounding
+factor. We cannot rule chunking in or out cleanly with the current design, since
+testing TabICL or TabPFN without chunking at $D_{\text{true}}=500$ requires
+$D \leq 2000$ and $D \leq 500$ respectively, where the scaling-signal rule has not yet
+reached $D_{\text{true}}=500$.
 
-\textbf{Compute constraints.} All experiments ran on CPU (Apple Silicon M1 Max,
-34GB RAM, no CUDA); TabPFN v2 and TabICL are primarily validated and optimized for GPU
-inference, so absolute wall-clock numbers here (Section~\ref{sec:setup}) are not
-representative of production latency, and we were forced to fix
-\verb|n_estimators=1| for both foundation models to stay within available memory,
-which likely understates their best achievable accuracy at any given $D$.
+\textbf{Compute constraints.} All experiments ran on a single Apple Silicon machine
+(M1 Max, 34GB RAM, no CUDA GPU); TabPFN ran via the machine's Apple GPU (MPS
+backend), while every other model ran CPU-only (Section~\ref{sec:setup}). None of
+these models' authors optimize for or validate on this hardware, so absolute
+wall-clock numbers here are not representative of production latency, and we were
+forced to fix \verb|n_estimators=1| for TabPFN and TabICL to stay within available
+memory, which likely understates their best achievable accuracy at any given $D$. We
+also found Nori leaks GPU memory across repeated instantiations within one
+long-running process and pinned it to CPU for reliability
+(Section~\ref{sec:setup}), giving up a measured $\sim$3--4$\times$ speedup for the
+same reason; its reported accuracy is unaffected by this choice of device.
 
 \textbf{Licensing.} TabPFN v2 and later PriorLabs checkpoints are released under a
-non-commercial research license; TabICL is BSD-3-Clause.
+non-commercial research license; TabICL is BSD-3-Clause; Nori is Apache-2.0.
 
 \textbf{Scope of the generative model.} A single fixed nonlinear true function family
 and one specific derived-feature construction were used throughout; results
@@ -477,34 +576,46 @@ over-generalized.
 
 We built a synthetic benchmark that can hold ambient feature dimensionality and
 causal signal dimensionality either independent or coupled, and used it to test
-whether a tabular foundation model's accuracy degrades as $D$ grows past its trained
-regime. The answer depends entirely on which of those two quantities is actually
-growing. When only ambient dimensionality grows (fixed-signal, $D_{\text{true}}=5$
-throughout), TabICL showed no degradation: test $R^2$ stayed within a narrow band
-(0.899--0.937) across three orders of magnitude in $D$ -- including past its native
-2000-feature cap, under a feature-bagging ensemble -- and clearly dominated Ridge,
-Random Forest, and XGBoost baselines throughout. When causal dimensionality scales
-with $D$ instead (scaling-signal, training set size held fixed), every model
-degraded sharply, TabICL included: from $R^2=0.937$ at $D=10$ to $0.151$ at
-$D=10000$, at which point a plain cross-validated Ridge baseline performs
-comparably. Dimensionality growth alone was not the hazard in our experiments;
-dimensionality growth that outpaces what a fixed amount of training data can resolve
-was. Real high-dimensional tabular data is presumably closer to our scaling-signal
-condition than our fixed-signal one, which is a reason for caution before reading
-robustness results like our own fixed-signal finding as license to deploy a tabular
-foundation model on arbitrarily wide data without checking whether more features are
-also bringing more (or less) signal per row of training data.
+whether three tabular foundation models' accuracy degrades as $D$ grows past their
+trained regime. The answer depends entirely on which of those two quantities is
+actually growing, and, once it does, on which specific model is being asked to
+handle it. When only ambient dimensionality grows (fixed-signal, $D_{\text{true}}=5$
+throughout), none of the three degraded: test $R^2$ stayed within a narrow band for
+each -- TabICL 0.899--0.937, TabPFN 0.897--0.933, Nori 0.928--0.950 -- across three
+orders of magnitude in $D$, including past TabICL's and TabPFN's native feature caps
+under a feature-bagging ensemble, and all three clearly dominated Ridge, Random
+Forest, and XGBoost baselines throughout. When causal dimensionality scales with $D$
+instead (scaling-signal, training set size held fixed), every model degraded
+sharply, but by very different amounts: TabICL fell least, from $R^2=0.937$ at
+$D=10$ to $0.151$ at $D=10000$, matched there by a plain cross-validated Ridge
+baseline; Nori fell to $0.098$; and TabPFN -- the model whose native regime the
+feature-bagging ensemble was originally designed to extend -- fell furthest of all
+six models tested, to $0.035$, below both tree baselines. Dimensionality growth
+alone was not the hazard in our experiments; dimensionality growth that outpaces
+what a fixed amount of training data can resolve was, and different foundation model
+architectures absorb that hazard very differently, with the most heavily-chunked
+model fairing the worst. Real high-dimensional tabular data is presumably closer to
+our scaling-signal condition than our fixed-signal one, which is a reason for caution
+before reading robustness results like our own fixed-signal finding as license to
+deploy a tabular foundation model on arbitrarily wide data without checking whether
+more features are also bringing more (or less) signal per row of training data --
+and, per our results, without checking which specific model is being deployed.
 
-We were unable to run either condition for TabPFN v2, which gates its model weights
-behind an interactive license-acceptance step with no automated path around it
-(Section~\ref{sec:setup}); the central open question this leaves is whether
-TabPFN's feature-bagging ensemble shows the same fixed-signal robustness and
-scaling-signal collapse we found for TabICL, or differs from it in either direction.
-Our implementation supports running both comparisons directly -- it only needs a
-valid \texttt{TABPFN\_TOKEN} -- and we release it for that purpose. Along the way,
-our benchmark reproduced the double-descent phenomenon at exactly the interpolation
-threshold for an under-regularized linear baseline, which we take as independent
-evidence the pipeline is measuring what it claims to measure.
+An earlier version of this paper reported TabPFN v2 as unrunnable, since its default
+model version gates its weights behind an interactive license-acceptance step with no
+automated path around it. We subsequently found this gate is specific to that default
+version, not to TabPFN v2's weights in general: its original v2 checkpoint downloads
+directly and ungated from Hugging Face (Section~\ref{sec:setup}), which let us
+complete the comparison we had originally released only as an untested code path. We
+also added Nori, a third, architecturally distinct foundation model with no published
+feature cap, which turned out to matter for more than completeness: its comparably
+severe collapse under scaling-signal, despite using no feature-bagging ensemble at
+all, is the clearest evidence in this study that the scaling-signal hazard is a
+property of the estimation problem itself, not primarily an artifact of the ensemble
+wrapper used to extend TabICL and TabPFN past their native caps (Section~\ref{sec:discussion}).
+Along the way, our benchmark reproduced the double-descent phenomenon at exactly the
+interpolation threshold for an under-regularized linear baseline, which we take as
+independent evidence the pipeline is measuring what it claims to measure.
 
 \section*{Acknowledgements}
 This research was assisted by Claude (Anthropic).

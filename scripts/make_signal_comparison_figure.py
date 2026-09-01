@@ -13,7 +13,9 @@ MODEL_LABELS = {
     "ridge": "Ridge",
     "random_forest": "Random Forest",
     "xgboost": "XGBoost",
+    "tabpfn": "TabPFN v2",
     "tabicl": "TabICL",
+    "nori": "Nori",
 }
 
 

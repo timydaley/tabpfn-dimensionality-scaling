@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from tabdim.experiment import run_sweep  # noqa: E402
 
 DEFAULT_DIMS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
-DEFAULT_MODELS = ["ridge", "random_forest", "xgboost", "tabpfn", "tabicl"]
+DEFAULT_MODELS = ["ridge", "random_forest", "xgboost", "tabpfn", "tabicl", "nori"]
 DEFAULT_REGIMES = ["fixed_n", "scaling_n"]
 DEFAULT_SIGNAL_REGIMES = ["fixed"]
 DEFAULT_SEEDS = list(range(5))
